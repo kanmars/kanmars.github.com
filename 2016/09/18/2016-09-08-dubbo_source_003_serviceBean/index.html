@@ -1,0 +1,180 @@
+<!DOCTYPE html><html lang="null"><head><meta http-equiv="content-type" content="text/html; charset=utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" name="viewport"><meta content="yes" name="apple-mobile-web-app-capable"><meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"><meta content="telephone=no" name="format-detection"><meta name="description"><title>[KANMARS原创]-DUBBO源码解析(3)-serviceBean | KANMARS的博客</title><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/normalize/5.0.0/normalize.min.css"><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/pure/0.6.0/pure-min.css"><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/pure/0.6.0/grids-responsive-min.css"><link rel="stylesheet" type="text/css" href="/css/style.css?v=0.0.0"><link rel="stylesheet" href="//cdn.bootcss.com/font-awesome/4.7.0/css/font-awesome.min.css"><script type="text/javascript" src="//cdn.bootcss.com/jquery/3.1.1/jquery.min.js"></script><link rel="Shortcut Icon" type="image/x-icon" href="/favicon.ico"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="apple-touch-icon-precomposed" href="/apple-touch-icon.png"></head><body><div class="body_container"><div id="header"><div class="site-name"><h1 class="hidden">[KANMARS原创]-DUBBO源码解析(3)-serviceBean</h1><a id="logo" href="/.">KANMARS的博客</a><p class="description">helloword 2046。趁着，我会喜怒你会哀乐，唱几分钟情歌。</p></div><div id="nav-menu"><a href="/." class="current"><i class="fa fa-home"> Start</i></a><a href="/archives/"><i class="fa fa-archive"> Archiv</i></a><a href="/2016/04/23/2016-04-23-mysongs/"><i class="fa fa-user"> Über</i></a></div></div><div id="layout" class="pure-g"><div class="pure-u-1 pure-u-md-3-4"><div class="content_container"><div class="post"><h1 class="post-title">[KANMARS原创]-DUBBO源码解析(3)-serviceBean</h1><div class="post-meta">Sep 18, 2016</div><a data-thread-key="2016/09/18/2016-09-08-dubbo_source_003_serviceBean/" href="/2016/09/18/2016-09-08-dubbo_source_003_serviceBean/#comments" class="ds-thread-count"></a><div class="post-content"><p>DUBBO源码解析(3)-serviceBean</p>
+<h1 id="一、serviceBean概述"><a href="#一、serviceBean概述" class="headerlink" title="一、serviceBean概述"></a>一、serviceBean概述</h1><p>我们终于讲到了serviceBean这个看似和Dubbo有点直接关系的地方，因为对于dubbo来说，我们最常做的事情，就是配置一个</p>
+<pre><code>&lt;dubbo:service loadbalance=&quot;${dubbo.loadbalance}&quot; timeout=&quot;${dubbo.run.timeout}&quot; group=&quot;${dubbo.group}&quot; interface=&quot;cn.com.gome.sn.dubbo.JkBusFacadeService&quot; ref=&quot;jkBusFacadeServiceImpl&quot; registry=&quot;SN-DubboProvider&quot;/&gt;    
+</code></pre><p>此处假设你已经精通Spring的自定义标签NameSpaceHandler功能，如果不懂，你就简单认为上述代码定义了一个Bean对象并托管给了Spring即可。</p>
+<p>从“定义了一个Bean对象并托管给了Spring”这个定义，我们能大致了解这个标签究竟发生了什么事情。</p>
+<p>在一个完成的配置中</p>
+<pre><code>&lt;dubbo:application name=&quot;sn-provider&quot;/&gt;
+&lt;dubbo:registry protocol=&quot;zookeeper&quot; address=&quot;${dubbo.run.registryAddress}&quot; id=&quot;SN-DubboProvider&quot;/&gt;
+&lt;dubbo:protocol name=&quot;dubbo&quot; port=&quot;${dubbo.run.port}&quot;/&gt;
+
+&lt;dubbo:service loadbalance=&quot;${dubbo.loadbalance}&quot; timeout=&quot;${dubbo.run.timeout}&quot; group=&quot;${dubbo.group}&quot; interface=&quot;cn.com.gome.sn.dubbo.JkBusFacadeService&quot; ref=&quot;jkBusFacadeServiceImpl&quot; registry=&quot;SN-DubboProvider&quot;/&gt;
+</code></pre><p>其实是定义了四个Bean对象，applicationConfig，registryConfig,protocolConfig,ServiceBean</p>
+<p>在此处，我们只讲serviceBean，这个对象的初始化操作中，已经包含了上述的所有的对象，具有较全的代表性。</p>
+<h1 id="二、serviceBean类图"><a href="#二、serviceBean类图" class="headerlink" title="二、serviceBean类图"></a>二、serviceBean类图</h1><p><img src="http://i.imgur.com/FKFb44a.png" alt=""></p>
+<p>以上即为serviceBean的类图，右侧的分支均为Spring支持，左侧的分支为最重要的Dubbo支持类。</p>
+<p>最核心要关注的有两个：serviceBean和serviceConfig</p>
+<h1 id="三、serviceBean"><a href="#三、serviceBean" class="headerlink" title="三、serviceBean"></a>三、serviceBean</h1><p>在serviceBean中有一个最重要的方法是afterPropertiesSet()，实现了Spring的InitializingBean接口,当spring在该对象newInstance之后，会调用afterPropertiesSet()方法，使得Bean进行初始化，而serviceBean的启动也来源于此。</p>
+<p>从代码中我们可以看到，afterPropertiesSet的执行过程如下：</p>
+<p>1、初始化Provider    -&gt;初始化一些配置-&gt;从spring上下文中获取已加载的provider</p>
+<p>2、初始化application    -&gt;初始化一些配置-&gt;从spring上下文中获取已加载的applicationContext</p>
+<p>3、初始化model       -&gt;初始化一些配置-&gt;从spring上下文中获取已加载的model</p>
+<p>4、初始化registries    -&gt;初始化一些配置-&gt;从spring上下文中获取已加载的registries</p>
+<p>5、初始化monitor        -&gt;初始化一些配置-&gt;从spring上下文中获取已加载的monitor</p>
+<p>6、初始化protocols    -&gt;初始化一些配置-&gt;从spring上下文中获取已加载的Protocols</p>
+<p>7、初始化path        -&gt;初始化path=beanName，此为在dubbo中注册的路径</p>
+<p>8、调用serviceConfig.export()</p>
+<p>以上可以看到serviceBean的启动比较简单，从spring上下文中获取相应的对象并设置入serviceBean，然后调用serviceConfig.export()将此Bean暴露出去</p>
+<h1 id="四、serviceConfig"><a href="#四、serviceConfig" class="headerlink" title="四、serviceConfig"></a>四、serviceConfig</h1><p>此类为service启动的核心部分，入口在serviceConfig.export()方法</p>
+<p>其调用堆栈如下：</p>
+<pre><code>export();
+doExport();
+doExportUrls();
+
+//获取到注册服务的地址
+//例如registry://10.58.50.203:2181/com.alibaba.dubbo.registry.RegistryService?application=sn-provider&amp;backup=10.58.50.204:2181,10.58.50.205:2181&amp;dubbo=2.5.5.cat-SNAPSHOT&amp;pid=8004&amp;registry=zookeeper&amp;timestamp=1474195361722
+List&lt;URL&gt; registryURLs = loadRegistries(true);    
+for (ProtocolConfig protocolConfig : protocols) {
+    doExportUrlsFor1Protocol(protocolConfig, registryURLs);
+}
+
+//将每个protocol，在registry上暴露出去
+doExportUrlsFor1Protocol(ProtocolConfig protocolConfig, List&lt;URL&gt; registryURLs) 
+
+//生成本地提供服务的url
+//dubbo://10.144.33.185:20880/cn.com.gome.sn.dubbo.JkBusFacadeService?anyhost=true&amp;application=sn-provider&amp;dubbo=2.5.5.cat-SNAPSHOT&amp;generic=false&amp;group=SN-uat&amp;interface=cn.com.gome.sn.dubbo.JkBusFacadeService&amp;loadbalance=leastactive&amp;methods=service&amp;pid=8004&amp;side=provider&amp;timeout=1000000&amp;timestamp=1474195593808
+URL url = new URL(name, host, port, (contextPath == null || contextPath.length() == 0 ? &quot;&quot; : contextPath + &quot;/&quot;) + path, map);
+
+//暴露本地服务
+exportLocol(url)
+Invoker invoker = proxyFactory.getInvoker(ref, (Class) interfaceClass, local);
+Exporter&lt;?&gt; exporter = protocol.export(invoker);
+//此处proxyFactory.getInvoker参见《Dubbo源码解析2-proxyFactory》，如果没看，你就认为此处对ref生成了一个AbstractProxyInvoker代理，并对ref对象的每一个方法都进行了封装，封装成了一个Result invoke(Invocation invocation)方法即可
+
+此后invoker对象的protocol为dubbo，则根据ExtensionLoader.getExtensionLoader(Protocol.class).getAdaptiveExtension()获取到的自适应类为DubboProtocol
+
+同时、此处因为ExtensionLoader.getExtensionLoader中含有warpper自动封装的代码，会将com.alibaba.dubbo.rpc.protocol.ProtocolFilterWrapper和com.alibaba.dubbo.rpc.protocol.ProtocolListenerWrapper也封装到DubboProtocol中，生成一个调用序列
+
+因此会按照如下堆栈顺序调用:
+ProtocolListenerWrapper.export(invoker)
+ProtocolFilterWrapper.export(invoker)
+invoker=buildInvokerChain(invoker, Constants.SERVICE_FILTER_KEY, Constants.PROVIDER);
+List&lt;Filter&gt; filters = ExtensionLoader.getExtensionLoader(Filter.class).getActivateExtension(invoker.getUrl(), key, group);
+将filter附加到协议的执行队列中
+DubboProtocol.export(invoker)
+
+URL url = invoker.getUrl();
+DubboExporter&lt;T&gt; exporter = new DubboExporter&lt;T&gt;(invoker, key, exporterMap);
+exporterMap.put(key, exporter);
+openServer(url)
+serverMap.put(key, createServer(url));
+ExchangeServer server = Exchangers.bind(url, requestHandler);    //此处requestHandler为DubboProtocol中内部类
+
+ExtensionLoader.getExtensionLoader(Exchanger.class).getExtension(type);//获取到的Exchangers是HeaderExchanger
+
+HeaderExchanger.bind(URL url, ExchangeHandler handler)
+return new HeaderExchangeServer(Transporters.bind(url, new DecodeHandler(new HeaderExchangeHandler(handler))));
+getTransporter().bind(url, handler);//此处默认获得的是NettyTransporter
+
+return new NettyServer(url, listener);
+doOpen()
+netty启动代码
+......
+    核心部分在于netty的pipeline，请参见netty使用教程
+    bootstrap.setPipelineFactory(new ChannelPipelineFactory() {
+        public ChannelPipeline getPipeline() {
+            NettyCodecAdapter adapter = new NettyCodecAdapter(getCodec() ,getUrl(), NettyServer.this);
+            ChannelPipeline pipeline = Channels.pipeline();
+            /*int idleTimeout = getIdleTimeout();
+            if (idleTimeout &gt; 10000) {
+                pipeline.addLast(&quot;timer&quot;, new IdleStateHandler(timer, idleTimeout / 1000, 0, 0));
+            }*/
+            pipeline.addLast(&quot;decoder&quot;, adapter.getDecoder());
+            pipeline.addLast(&quot;encoder&quot;, adapter.getEncoder());
+            pipeline.addLast(&quot;handler&quot;, nettyHandler);
+            return pipeline;
+        }
+    });
+......
+
+此处有两处需要重视的地方，1是pipeline中的adapter，2是pipeline中的handler。此处假设你已精通netty，不再赘述netty原理。
+
+
+1、Adapter
+adapter = new NettyCodecAdapter(getCodec() ,getUrl(), NettyServer.this);
+getCodec()的返回值是codec，此值在AbstractEndpoint中被设置为DubboCodec
+而adapter.getDecoder()的代码中，最终调用的是DubboCodec.decode(channel, message)方法
+而adapter.getEncoder()的代码中，最终调用的是DubboCodec.encode(channel, buffer, msg)方法
+
+2、handler
+handler的结构如下：
+NettyHandler nettyHandler = new NettyHandler(getUrl(), this);
+NettyServer.handler(...)
+NettyServer.hander.handler(...)
+new HeaderExchangeHandler(handler)
+new DecodeHandler()
+new DubboProtocol().requestHandler
+requestHandler内部
+Invoker&lt;?&gt; invoker = getInvoker(channel, inv);
+DubboExporter&lt;?&gt; exporter = (DubboExporter&lt;?&gt;) exporterMap.get(serviceKey);
+exporter.getInvoker();
+return invoker.invoke(inv);
+
+因此你可以看到
+1、Netty在启动端口后，会在Netty的管道线中注册NettyCodecAdapter
+2、在接受到消息后，会调用NettyCodecAdapter.getDecoder().decode()方法对对象进行解码
+3、也即调用DubboCodec.decode(channel,Message)方法（随着协议的不同，此处调用的编码不同）
+4、当在ExchangeCodec层把一次报文交互的所有byte接受完全，调用DubboCodec.decodeBody的request分支（第二分支）
+5、DecodeableRpcInvocation inv=new DecodeableRpcInvocation(channel, req, is, proto);
+6、调用decode()方法，将byte数组转化为ObjectInput，此处的对象序列化较为复杂，改天单独一章节
+7、req.setData(inv);//将RpcInvocation设置入Request对象
+8、触发HeaderExchangeHandler.received方法，在此方法内部，将request.getData()对象交给下一层handler
+9、触发DecodeHandler.received方法，调用DecodeableRpcInvocation.decode方法进行解密
+10、触发DubboProtocol.requestHandler的reply方法
+11、调用Invoker&lt;?&gt; invoker = getInvoker(channel, inv);获取到在这个Protocol的exporterMap上注册的DubboExporter
+12、调用DubboExporter.getInvoker().invoke()方法执行Invocation
+13、调用invoker，根据invokecation中记录的方法签名，对ref进行实际调用
+14、跳出至DecodeHandler.received()
+15、跳出至HeaderExchangeHandler.handleRequest()
+17、在HeaderExchangeHandler.handleRequest中，设置Response res = new Response(req.getId(), req.getVersion());
+18、设置res.setResult(result);
+19、跳出至HeaderExchangeHandler.received()
+20、在HeaderExchangeHandler.received()中调用channel.send(response)方法
+21、在NettyCodecAdapter中调用InternalEncoder.encode方法
+22、调用DubboCodec.encode方法，调用DubboCodec.encodeResponse方法
+23、调用DubboCodec.encodeResponseData(channel, out, res.getResult());
+24、调用NettyCodecAdapter.InternalEncoder.OneToOneEncoder的Channels.write(ctx, e.getFuture(), encodedMessage, e.getRemoteAddress());将消息写到channels中
+</code></pre><p>至此，一次Dubbo调用在服务器端走完了调用流程</p>
+<h1 id="五、总结"><a href="#五、总结" class="headerlink" title="五、总结"></a>五、总结</h1><p>Dubbo调用在服务器端的时间，是分层次实现的调用过程，大致为如下层次:</p>
+<pre><code>Netty
+    NettyCodecAdapter.getDecoder
+        DubboCodec.decode
+            DubboCodec.decodeBody
+                new DecodeableRocInvocation();
+                    new Request();
+                        HeaderExchangeHandler.receive
+                            HeaderExchangeHandler.handleRequest()
+                                DecodeHandler.received
+                                    DubboProtocol.requestHandler.reply
+                                    Invoker&lt;?&gt; invoker = getInvoker(channel, inv);
+                                    DubboExporter.getInvoker().invoke()
+                                DecodeHandler.received()
+                            HeaderExchangeHandler.handleRequest()
+                        HeaderExchangeHandler.received
+                        new Response()
+                        channel.send(response)
+        DubboCodec.encode
+            DubboCodec.encodeResponse
+    NettyCodecAdapter.InternalEncoder.OneToOneEncoder
+        Channels.write(ctx, e.getFuture(), encodedMessage, e.getRemoteAddress())
+</code></pre><p>至此，Dubbo在服务器端的调用经过以上二十余步，完成了一次服务器调用过程。</p>
+</div><script type="text/javascript" src="/js/share.js?v=0.0.0" async></script><a data-url="https://kanmars.github.io/2016/09/18/2016-09-08-dubbo_source_003_serviceBean/" data-id="ciwjetzgf002i48vqmeuswjtp" class="article-share-link">Aktie</a><div class="tags"><a href="/tags/server/">server</a><a href="/tags/java/">java</a></div><div class="post-nav"><a href="/2016/09/19/2016-09-08-dubbo_source_004_referenceBean/" class="pre">[KANMARS原创]-DUBBO源码解析(4)-referenceBean</a><a href="/2016/09/18/2016-09-08-dubbo_source_002_proxyFactory/" class="next">[KANMARS原创]-DUBBO源码解析(2)-proxyFactory</a></div><div data-thread-key="2016/09/18/2016-09-08-dubbo_source_003_serviceBean/" data-title="[KANMARS原创]-DUBBO源码解析(3)-serviceBean" data-url="https://kanmars.github.io/2016/09/18/2016-09-08-dubbo_source_003_serviceBean/" class="ds-share flat"><div class="ds-share-inline"><ul class="ds-share-icons-16"><li data-toggle="ds-share-icons-more"><a href="javascript:void(0);" class="ds-more">分享到：</a></li><li><a href="javascript:void(0);" data-service="weibo" class="ds-weibo">微博</a></li><li><a href="javascript:void(0);" data-service="qzone" class="ds-qzone">QQ空间</a></li><li><a href="javascript:void(0);" data-service="qqt" class="ds-qqt">腾讯微博</a></li><li><a href="javascript:void(0);" data-service="wechat" class="ds-wechat">微信</a></li></ul><div class="ds-share-icons-more"></div></div></div><div data-thread-key="2016/09/18/2016-09-08-dubbo_source_003_serviceBean/" data-title="[KANMARS原创]-DUBBO源码解析(3)-serviceBean" data-url="https://kanmars.github.io/2016/09/18/2016-09-08-dubbo_source_003_serviceBean/" data-author-key="1" class="ds-thread"></div></div></div></div><div class="pure-u-1-4 hidden_mid_and_down"><div id="sidebar"><div class="widget"><form action="//www.baidu.com/baidu" method="get" accept-charset="utf-8" target="_blank" class="search-form"><input type="search" name="word" maxlength="20" placeholder="Search"/><input type="hidden" name="si" value="https://kanmars.github.io"/><input name="tn" type="hidden" value="bds"/><input name="cl" type="hidden" value="3"/><input name="ct" type="hidden" value="2097152"/><input name="s" type="hidden" value="on"/></form></div><div class="widget"><div class="widget-title"><i class="fa fa-folder-o"> Kategorien</i></div></div><div class="widget"><div class="widget-title"><i class="fa fa-star-o"> Tags</i></div><div class="tagcloud"><a href="/tags/jetty/" style="font-size: 15px;">jetty</a> <a href="/tags/it/" style="font-size: 15px;">it</a> <a href="/tags/architecture/" style="font-size: 15px;">architecture</a> <a href="/tags/itlife/" style="font-size: 15px;">itlife</a> <a href="/tags/rsa/" style="font-size: 15px;">rsa</a> <a href="/tags/tb/" style="font-size: 15px;">tb</a> <a href="/tags/drawline/" style="font-size: 15px;">drawline</a> <a href="/tags/life/" style="font-size: 15px;">life</a> <a href="/tags/strategy/" style="font-size: 15px;">strategy</a> <a href="/tags/tblife/" style="font-size: 15px;">tblife</a> <a href="/tags/java/" style="font-size: 15px;">java</a> <a href="/tags/linux/" style="font-size: 15px;">linux</a> <a href="/tags/spring/" style="font-size: 15px;">spring</a> <a href="/tags/server/" style="font-size: 15px;">server</a> <a href="/tags/c/" style="font-size: 15px;">c</a> <a href="/tags/c/" style="font-size: 15px;">c++</a> <a href="/tags/lua/" style="font-size: 15px;">lua</a> <a href="/tags/android/" style="font-size: 15px;">android</a> <a href="/tags/javascript/" style="font-size: 15px;">javascript</a> <a href="/tags/neuralnetwork/" style="font-size: 15px;">neuralnetwork</a> <a href="/tags/cpu/" style="font-size: 15px;">cpu</a> <a href="/tags/disk/" style="font-size: 15px;">disk</a> <a href="/tags/fidsk/" style="font-size: 15px;">fidsk</a> <a href="/tags/fstab/" style="font-size: 15px;">fstab</a> <a href="/tags/lvm/" style="font-size: 15px;">lvm</a> <a href="/tags/aix/" style="font-size: 15px;">aix</a></div></div><div class="widget"><div class="widget-title"><i class="fa fa-file-o"> Letzte</i></div><ul class="post-list"><li class="post-list-item"><a class="post-list-link" href="/2016/11/18/2016-11-18-springmvc_source_004_viewresolver/">[KANMARS原创]-SpringMVC源码解析(4) - 视图处理器</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/18/2016-11-18-springmvc_source_003_requestprocess/">[KANMARS原创]-SpringMVC源码解析(3) - 请求处理过程</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/17/2016-11-17-springmvc_source_002_start/">[KANMARS原创]-SpringMVC源码解析(2) - 启动过程</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/17/2016-11-17-springmvc_source_001_introduce/">[KANMARS原创]-SpringMVC源码解析(1) - 简介</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/04/2016-11-04-SomeThingAndNothing/">SomeThingAndNothing</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/25/2016-10-25-news-LongRoad/">news It's a Long Road</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/19/2016-10-19-Scale-Services/">On Designing and Deploying Internet-Scale Services</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/18/2016-10-18-dubbo_source_006_summarize/">[KANMARS原创]-DUBBO源码解析(6)-summarize</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/18/2016-10-18-dubbo_source_005_consumerCall/">[KANMARS原创]-DUBBO源码解析(5)-consumerCall</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/09/19/2016-09-08-dubbo_source_004_referenceBean/">[KANMARS原创]-DUBBO源码解析(4)-referenceBean</a></li></ul></div><div class="widget"><div class="comments-title"><i class="fa fa-comment-o"> Letzte Kommentare</i></div><div data-num-items="5" data-show-avatars="0" data-show-time="1" data-show-admin="0" data-excerpt-length="32" data-show-title="1" class="ds-recent-comments"></div></div><div class="widget"><div class="widget-title"><i class="fa fa-external-link"> Blogroll</i></div><ul></ul><a href="http://www.linux.cn" title="Linux-CN" target="_blank">Linux-CN</a><ul></ul><a href="http://www.gome.com.cn" title="国美互联网" target="_blank">国美互联网</a><ul></ul><a href="http://jr.gome.com.cn" title="国美金融" target="_blank">国美金融</a></div></div></div><div class="pure-u-1 pure-u-md-3-4"><div id="footer">© <a href="/." rel="nofollow">KANMARS的博客.</a> Powered by<a rel="nofollow" target="_blank" href="https://hexo.io"> Hexo.</a><a rel="nofollow" target="_blank" href="https://github.com/tufu9441/maupassant-hexo"> Theme</a> by<a rel="nofollow" target="_blank" href="https://github.com/pagecho"> Cho.</a></div></div></div><a id="rocket" href="#top" class="show"></a><script type="text/javascript" src="/js/totop.js?v=0.0.0" async></script><script type="text/javascript" src="//cdn.bootcss.com/fancybox/2.1.5/jquery.fancybox.pack.js" async></script><script type="text/javascript" src="/js/fancybox.js?v=0.0.0" async></script><link rel="stylesheet" type="text/css" href="/css/jquery.fancybox.css?v=0.0.0"><script>var duoshuoQuery = {short_name:'kanmars'};
+(function() {
+    var ds = document.createElement('script');
+    ds.type = 'text/javascript';ds.async = true;
+    ds.src = (document.location.protocol == 'https:' ? 'https:' : 'http:') + '//static.duoshuo.com/embed.js';
+    ds.charset = 'UTF-8';
+    (document.getElementsByTagName('head')[0]
+        || document.getElementsByTagName('body')[0]).appendChild(ds);
+})();
+</script><script type="text/javascript" src="/js/codeblock-resizer.js?v=0.0.0"></script><script type="text/javascript" src="/js/smartresize.js?v=0.0.0"></script></div></body></html>

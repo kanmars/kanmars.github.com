@@ -1,0 +1,224 @@
+<!DOCTYPE html><html lang="null"><head><meta http-equiv="content-type" content="text/html; charset=utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" name="viewport"><meta content="yes" name="apple-mobile-web-app-capable"><meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"><meta content="telephone=no" name="format-detection"><meta name="description"><title>On Designing and Deploying Internet-Scale Services | KANMARS的博客</title><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/normalize/5.0.0/normalize.min.css"><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/pure/0.6.0/pure-min.css"><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/pure/0.6.0/grids-responsive-min.css"><link rel="stylesheet" type="text/css" href="/css/style.css?v=0.0.0"><link rel="stylesheet" href="//cdn.bootcss.com/font-awesome/4.7.0/css/font-awesome.min.css"><script type="text/javascript" src="//cdn.bootcss.com/jquery/3.1.1/jquery.min.js"></script><link rel="Shortcut Icon" type="image/x-icon" href="/favicon.ico"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="apple-touch-icon-precomposed" href="/apple-touch-icon.png"></head><body><div class="body_container"><div id="header"><div class="site-name"><h1 class="hidden">On Designing and Deploying Internet-Scale Services</h1><a id="logo" href="/.">KANMARS的博客</a><p class="description">helloword 2046。趁着，我会喜怒你会哀乐，唱几分钟情歌。</p></div><div id="nav-menu"><a href="/." class="current"><i class="fa fa-home"> Start</i></a><a href="/archives/"><i class="fa fa-archive"> Archiv</i></a><a href="/2016/04/23/2016-04-23-mysongs/"><i class="fa fa-user"> Über</i></a></div></div><div id="layout" class="pure-g"><div class="pure-u-1 pure-u-md-3-4"><div class="content_container"><div class="post"><h1 class="post-title">On Designing and Deploying Internet-Scale Services</h1><div class="post-meta">Oct 19, 2016</div><a data-thread-key="2016/10/19/2016-10-19-Scale-Services/" href="/2016/10/19/2016-10-19-Scale-Services/#comments" class="ds-thread-count"></a><div class="post-content"><p>译文地址：<a href="http://duanple.blog.163.com/blog/static/70971767201352105348729/" target="_blank" rel="external">http://duanple.blog.163.com/blog/static/70971767201352105348729/</a></p>
+<h1 id="摘要"><a href="#摘要" class="headerlink" title="摘要"></a>摘要</h1><p>“系统-管理员”比例通常可以作为一种理解大规模服务的管理开销的粗略度量方式。对于那些越小，越缺乏自动化的服务来说，这个比率越低可能低至2:1，而对于那些业界领先，高度自动化的服务来说，该比率已可高达2500:1。在微软的众多服务之中，Autopilot [1] 经常被认为是Windows Live Search团队成功达到高的“系统-管理员”比例背后的魔法。尽管自动化管理确实很重要，但最重要的还是服务本身。服务是否能够高效地进行自动化？是否是运维友好的(operations-friendly)？运维友好的服务几乎不需要人工干预，同时除了极个别最难解的故障外都可以在无管理员干预的情况下被自动检测到并恢复。本文总结了MSN和Windows Live在支撑一些超大型服务过程中多年积累下来的最佳实践。</p>
+<h1 id="导引"><a href="#导引" class="headerlink" title="导引"></a>导引</h1><p>本文总结了用于设计和开发运维友好的服务的一系列最佳实践。大规模服务的设计和部署目前仍是一个快速发展中的领域，因此，这样的一个最佳实践列表随着时间的推移也会不断的演化。我们的目的是帮助人们：</p>
+<ol>
+<li><p>快速交付运维友好的服务</p>
+</li>
+<li><p>远离那些非运维友好的服务可能带来的：凌晨的电话报警，充满了客户抱怨声的恼人会议</p>
+</li>
+</ol>
+<p>这里的内容吸收了我们过去20年在大型数据中心软件系统和Internet级服务方面的经验，其中大部分来自于最近领导Exchange Hosted Services(一个中等规模的service，有大约700台服务器和2百多万用户)团队期间。同时其中也包含了来自Windows Live Search, Windows Live Mail, Exchange Hosted Services, Live Communications Server, Windows Live Address Book Clearing House (ABCH), MSN Spaces, Xbox Live, Rackable Systems Engineering Team, Messenger Operations，Microsoft Global Foundation Services Operations等诸多团队的经验。此外本文也深受Berkeley关于Recovery Oriented Computing[2,3]和Stanford关于Crash-Only Software[4,5]的研究工作的影响。</p>
+<p>Bill Hoffman[6]给本文贡献了很多最佳实践，此外还有三条很值得一开始就介绍下的简单信条：</p>
+<ol>
+<li><p>Expect failures。一个组件可能在任意时间挂掉或停止工作。它所依赖的组件也可能在任何时间挂掉或停止工作。会发生网络故障，磁盘空间耗尽等。需要优雅地处理所有的故障。</p>
+</li>
+<li><p>Keep things simple。复杂导致问题。简单的东西更容易做正确。避免不必要的依赖。安装应该很简单。单台服务器的故障应该对集群其它部分没有影响。</p>
+</li>
+<li><p>Automate everything。人会犯错。人需要睡觉。人会忘记东西。自动化的过程是可测试的，可固定的，因此最终更可靠。尽可能地将所有地方自动化。</p>
+</li>
+</ol>
+<p>这三条原则形成了贯穿后面大多数讨论的主线。</p>
+<h1 id="建议"><a href="#建议" class="headerlink" title="建议"></a>建议</h1><p>本节被分成如下10小节，每小节都覆盖了设计和部署运维友好的服务所需遵守的不同方面的要求：</p>
+<p>1、  总体服务设计</p>
+<p>2、  自动化管理和配置</p>
+<p>3、  依赖管理</p>
+<p>4、  发布周期和测试</p>
+<p>5、  硬件选型和标准化</p>
+<p>6、  运维和容量规划</p>
+<p>7、  审计监控和报警</p>
+<p>8、  优雅降级和准入控制</p>
+<p>9、  客户和媒体沟通计划</p>
+<p>10、  客户自配置和自助</p>
+<h1 id="总体设计"><a href="#总体设计" class="headerlink" title="总体设计"></a>总体设计</h1><p>我们相信，80%的运维问题源自设计和开发。因此服务总体设计这一节是篇幅最多，也最重要的一节。系统发生故障时，很自然会先去检查运维过程，因为那是问题实际发生的地方。但是，大多数的运维问题要么是设计或开发导致的，要么是最好在设计和开发阶段解决。</p>
+<p>在下面的小节中有一个共识：严格地区分开发、测试和运维，这在服务的世界里并不是最有效的工作方式。我们在很多服务那里看到低成本的管理跟开发、测试和运维团队间合作的紧密程度密切相关。</p>
+<p>除了本节讨论的最佳实践，下一节的“面向自动化和预防式的设计”，对服务设计也有很大的影响。高效的自动化管理和配置只有在特定的服务模型上才能达成。这是一个反复强调的主题：简单性是高效运维的关键。在硬件选择，服务设计，部署模型上的合理限制，可以大大降低管理成本，提高服务可靠性。</p>
+<p>对服务整体设计影响最大的一些运维友好的基本原则如下：</p>
+<h2 id="l-Design-for-failure。"><a href="#l-Design-for-failure。" class="headerlink" title="l  Design for failure。"></a>l  Design for failure。</h2><p>这是一个开发由很多协作组件构成的大型服务时的核心观念。那些组件会发生故障，而且会频繁发生故障。一旦服务规模超过10,000台服务器和50,000个磁盘后，一天内都会发生多次故障。如果一个硬件故障发生后需要马上进行人工处理，那么服务就根本没办法低成本和可靠地进行扩展。整个服务必须有能力在没有人工干预的情况下在故障发生时还能继续工作。故障恢复必须是非常简单的路径，并且经常对该路径进行测试。Stanford的Armando Fox认为最好的测试故障路径的方式就是从来都不去正常地停掉服务，而是直接让它挂掉。这看起来违反直觉，但如果故障路径没有频繁被使用的话， 在真的需要它的时候它根本就不能工作。</p>
+<h2 id="l-冗余和故障恢复。"><a href="#l-冗余和故障恢复。" class="headerlink" title="l  冗余和故障恢复。"></a>l  冗余和故障恢复。</h2><p>大型机模型是要购买非常大非常昂贵的服务器。大型机具有冗余的电源、热插拔的CPU、独特的总线结构，在一个单一、紧耦合的系统中提供了令人惊讶的IO吞吐量。这种方式明显的问题是成本高，但即使这样，它也不是足够可靠。要达到5个9的可靠性，冗余是必需的。即使要达到4个9，单系统的部署方式也是很难做到的。这个观念已经在业界被广泛接受，但还是能经常看到一些部署在脆弱的、非冗余数据层上的服务。</p>
+<p>要设计一个任何组件在任何时间都可以挂掉(或者是关掉服务)，但仍能满足相应SLA(service level agreement)的服务，需要细致的工程化。要判断是否遵循了这条设计原则，可以采用如下方法：运维团队是否愿意并且也能够随时关掉服务的任何一个服务器，同时也不用等待将上面的工作负载排除？如果可以，那么说明服务实现了同步化冗余（没有数据丢失），故障检测和自动failover。</p>
+<p>作为一种设计方法，我们介绍一下常用来发现和纠正服务的潜在安全问题的安全威胁模型。在安全威胁模型里，我们考虑每一种可能的安全威胁，并且针对性地给出缓解方案。同样的方法可以用在容错和故障恢复的设计上。</p>
+<p>列举出所有可能的组件故障模式，及其组合。<br>对每一种故障，确保服务能够在没有无法接受的服务质量损失情况下继续运作，或者确定该故障的风险对这个服务是可接受的（比如，没有地理冗余的服务的整个数据中心挂掉了）。一些非常不寻常的故障组合，要处理它们在成本上是不可接受的，可能会被认为它们是不可能发生的。但是，做这种决定时要谨慎。我们已多次惊讶的发现某些不寻常的”事件的组合，如何频繁发生在运行成千上万的服务器每天数以百万计的组件故障的情况下了。罕见的组合可以 变得司空见惯。</p>
+<h2 id="l-Commodity-hardware-slice。"><a href="#l-Commodity-hardware-slice。" class="headerlink" title="l  Commodity hardware slice。"></a>l  Commodity hardware slice。</h2><p>服务的所有组件都应当是基于普通硬件的。比如，一个具有轻量级存储的服务器可能是具有dual socket(双插槽)，单磁盘的价值1000-2500美元的2-4核系统；一个具有重量级存储的服务器，与之配置相似，但是会具有16到24个磁盘。关键的洞察如下：</p>
+<ol>
+<li><p>由大量廉价服务器组成的大规模集群要比由少量大型服务器组成的便宜很多。</p>
+</li>
+<li><p>服务器性能比IO性能的增长快得多。同样数量的磁盘，小型服务器的性能更均衡。</p>
+</li>
+<li><p>耗电量跟服务器数量是线性关系，跟时钟频率是三次方关系，使得高性能服务器运营成本更高。</p>
+</li>
+<li><p>小服务器failover时只会影响服务整体工作负载中的一小部分。</p>
+</li>
+</ol>
+<h2 id="l-单一版本软件。"><a href="#l-单一版本软件。" class="headerlink" title="l  单一版本软件。"></a>l  单一版本软件。</h2><p>有两个因素让服务比大多数打包发行的软件开发成本更低，进化更快，对于服务来说：</p>
+<p>n  软件只需要面向一个单一的内部部署环境</p>
+<p>n  之前的版本不需要像面向企业的产品那样一支持就是10几年</p>
+<p>单一版本软件相对容易为消费者提供服务，尤其是免费提供。但是在向非消费者销售基于订阅的服务时，这一点也是同等重要的。企业已经习惯了强力地影响它们的软件提供商，并且习惯了在部署新版本时拥有完全的控制(通常是非常缓慢的)。这抬高了运维成本和支持成本，因为有很多版本需要支持。</p>
+<p>最经济的服务不会让客户可以控制它们的运行版本，同时只会保有一个版本。控制这种单一版本软件时需要：</p>
+<p>n  发布要避免造成用户体验发生根本改变</p>
+<p>n  对于那些想要控制版本升级的客户来说，要么自己部署一套，要么切换到愿意提供多版本支持的服务商。</p>
+<h2 id="l-多租户-Multi-tenancy-。"><a href="#l-多租户-Multi-tenancy-。" class="headerlink" title="l  多租户(Multi-tenancy)。"></a>l  多租户(Multi-tenancy)。</h2><p>多租户是指将所有公司或终端用户都囊括在同一个没有物理隔离的服务里，而与之相比单租户则是指将用户进行分组放到独立的集群中。进行多租户的理由几乎与单一版本软件相同，同时也是因为这样可以为建立在自动化基础上的大规模服务从根本上降低成本。</p>
+<p>回顾一下，我们上面已经提出的基本设计原则和考虑点是：</p>
+<p>l  Design for failure。</p>
+<p>l  冗余和故障恢复</p>
+<p>l  基于廉价硬件</p>
+<p>l  提供单一版本软件</p>
+<p>l  实现多租户</p>
+<p>通过对服务设计和运维模型进行限制，可以最大化我们构建自动化和低成本的服务的能力。在我们的这些目标和应用服务提供商或者IT外包商的那些目标之间有一个明显的区别。那些企业通常是人力密集型的，同时更愿意运行复杂的，由客户定制的配置。</p>
+<p>一些更具体的设计运维友好的服务的最佳实践如下：</p>
+<h2 id="l-服务健康状况快速检查。"><a href="#l-服务健康状况快速检查。" class="headerlink" title="l  服务健康状况快速检查。"></a>l  服务健康状况快速检查。</h2><p>服务版的构建验证测试(BVT)，这是一个可以在开发人员的系统环境上运行的嗅探性测试，确保服务没有遭受实质性的破坏。不是所有的边界条件都会被测试到，但如果这个测试通过了，代码可以ci。</p>
+<h2 id="l-在完整的环境里开发。"><a href="#l-在完整的环境里开发。" class="headerlink" title="l  在完整的环境里开发。"></a>l  在完整的环境里开发。</h2><p>开发除了需要进行自己模块的单元测试，还要对包含了他们的变更后的整个服务进行测试。要高效的实现这一点需要支持单机部署 (见2.4节)，以及前面的那条最佳实践—服务健康状况快速检查。</p>
+<h2 id="l-对底层组件零信任。"><a href="#l-对底层组件零信任。" class="headerlink" title="l  对底层组件零信任。"></a>l  对底层组件零信任。</h2><p>假定依赖组件会挂掉，同时要确保组件能恢复并继续提供服务。恢复技术是与服务本身相关的，但是也有一些常用的恢复技术：</p>
+<p>n  以只读模式继续访问缓存的数据</p>
+<p>n  继续对所有用户提供服务，除了那些受故障影响的一小部分用户</p>
+<h2 id="l-不在多个组件里实现同样的功能。"><a href="#l-不在多个组件里实现同样的功能。" class="headerlink" title="l  不在多个组件里实现同样的功能。"></a>l  不在多个组件里实现同样的功能。</h2><p>要预见未来的交互方式是很困难的，同时如果系统中存在代码冗余的话那就需要在系统的多个部分中进行修复。服务总在快速的增长和演化。如不小心，代码库会迅速恶化。</p>
+<h2 id="l-一个隔舱或集群不应该影响其它隔舱或集群。"><a href="#l-一个隔舱或集群不应该影响其它隔舱或集群。" class="headerlink" title="l  一个隔舱或集群不应该影响其它隔舱或集群。"></a>l  一个隔舱或集群不应该影响其它隔舱或集群。</h2><p>大部分服务都是由位于多个隔舱或子集群的相互协作的多个系统组成。隔舱间要尽可能100%独立，避免关联故障。那些全局性的服务即使具有冗余备份也是一个单点。有时候这种情况可能无法避免，但是还是要尽可能把一个集群依赖的东西都放到集群里面。</p>
+<h2 id="l-允许-极少情况下的-紧急人工干预。"><a href="#l-允许-极少情况下的-紧急人工干预。" class="headerlink" title="l  允许(极少情况下的)紧急人工干预。"></a>l  允许(极少情况下的)紧急人工干预。</h2><p>常见的场景是灾害后或其他紧急情况下的用户数据迁移。将系统设计的永远不需要人工干预，但是也要理解一些组合故障或者意料之外的故障发生时会需要人工干预。这些情况会发生，同时在这些情况下的操作错误是很多灾难性数据丢失的常见来源。一个在凌晨2点顶着压力干活的PE，可能犯错。系统的设计首先要让绝大多数情况不需要PE干预，但对于需要PE干预的情况，要跟PE一起确定预案。预案不能是记在文档里的多步骤的、容易出错的过程，应该将它们写成脚本，在生产环境测试，确保可用。没有在生产环境里测试过的东西是无法work的。所以运维团队应该周期性地组织演习来使用这些工具。如果演习对服务可用性的风险很大，说明对于这些工具的设计、开发、测试的投入不够。</p>
+<h2 id="l-保持简单和健壮。"><a href="#l-保持简单和健壮。" class="headerlink" title="l  保持简单和健壮。"></a>l  保持简单和健壮。</h2><p>复杂的算法和组件交互会将调试和部署等方面的困难加倍。在大规模服务中，故障模式的数量在进行复杂的优化之前就够让人害怕的了。一个总体原则是：超过一个数量级的改进才值得考虑，只有几个百分点甚至更少的改进是不值得去做的。</p>
+<h2 id="l-在所有层执行准入控制。"><a href="#l-在所有层执行准入控制。" class="headerlink" title="l  在所有层执行准入控制。"></a>l  在所有层执行准入控制。</h2><p>所有好系统都会在前门设计有准入控制。这遵循了一个长期以来被人们所接受的原则：与继续接受新任务导致系统震荡相比，更好的方式是不要让更多任务进入过载的系统。在服务入口处通常都有某种形式的流控或准入控制，但是在所有重要组件的边界上也都应该有准入控制。负载特点的变化常常会导致某个子组件过载，尽管整体服务负载可能还在一个可以接受的水平上。下面第2.8节里提到的“big red switch”就是一种在过载情况下的优雅降级方式。总体原则是尝试优雅降级而不是让系统直接挂掉，在所有用户受到影响之前阻止进入。</p>
+<h2 id="l-对服务进行分区-Partition-the-service-。"><a href="#l-对服务进行分区-Partition-the-service-。" class="headerlink" title="l  对服务进行分区(Partition the service)。"></a>l  对服务进行分区(Partition the service)。</h2><p>分区应该是细粒度的，无限可调的，并且不绑定在任何现实实体上(比如人，团体等)。比如如果按照公司进行划分，那么一个规模很大的公司就会超过单个分区的大小。再比如如果按照人名前缀进行划分，那么最后那些以P开头的，采用单个服务器将会存不下。我们推荐用一个中间层的查找表把细粒度实体(典型的如用户)映射到相应的数据管理系统。然后这些细粒度分区就可以在服务器间自由移动。</p>
+<h2 id="l-理解网络设计。"><a href="#l-理解网络设计。" class="headerlink" title="l  理解网络设计。"></a>l  理解网络设计。</h2><p>尽早进行测试以了解什么样的负载会发生在机架内、跨机架、跨数据中心。应用程序开发人员必须了解网络的设计，并且要提早与运维团队里的网络专家们一起对它进行review。</p>
+<h2 id="l-分析吞吐率和延迟。"><a href="#l-分析吞吐率和延迟。" class="headerlink" title="l  分析吞吐率和延迟。"></a>l  分析吞吐率和延迟。</h2><p>为了理解其影响，必须要对核心服务用户交互的吞吐量和延迟进行分析。并将这件事与其他一些操作像日常数据库维护、运维配置管理(新用户添加，用户迁移)、服务调试一样进行常规化。这将有助于发现因某些周期性管理任务引发的问题。对于每个服务来说，所需的度量量可以与容量规划相结合，比如系统的每秒用户请求数、系统的并发在线用户数或者是某些可以将相关工作负载映射到资源需求的度量量。</p>
+<h2 id="l-把运维工具作为服务的一部分。"><a href="#l-把运维工具作为服务的一部分。" class="headerlink" title="l  把运维工具作为服务的一部分。"></a>l  把运维工具作为服务的一部分。</h2><p>由开发、测试、PM、PE编写的运维工具都要在开发过程中进行代码review，checkin到代码主干，跟代码一起进行跟踪维护和测试。常见的情况是，这些工具非常关键，但是却几乎没被测试过。</p>
+<h2 id="l-理解访问模式。"><a href="#l-理解访问模式。" class="headerlink" title="l  理解访问模式。"></a>l  理解访问模式。</h2><p>规划新feature时，一定要考虑它会给后端存储带来怎样的负载。通常服务模型和服务开发者所在的抽象层次已经脱离了底层存储，这使得他们无法注意到负载会给底层数据库带来怎样的影响。一个最佳实践是给SPEC (Standard Performance Evaluation Corporation，系统性能评估测试)加上一节：“这个feature对系统其它部分有什么影响？” ，然后在feature上线时验证负载的情况是否符合。</p>
+<h2 id="l-将所有东西版本化。"><a href="#l-将所有东西版本化。" class="headerlink" title="l  将所有东西版本化。"></a>l  将所有东西版本化。</h2><p>要假设系统是运行在一个多版本混合的环境里。目标是运行单一版本软件，但在上线和生产测试时会有多版本共存。所有组件的n和n+1版本都要能和平共处。</p>
+<h2 id="l-保留上次发布的UT和FT。"><a href="#l-保留上次发布的UT和FT。" class="headerlink" title="l  保留上次发布的UT和FT。"></a>l  保留上次发布的UT和FT。</h2><p>这些测试是用来验证n-1版本的功能没有被破坏掉的重要手段。更进一步地，我们强烈推荐要持续在生产环境跑验证测试(后面还会详细解释)。</p>
+<h2 id="l-避免单点故障。"><a href="#l-避免单点故障。" class="headerlink" title="l  避免单点故障。"></a>l  避免单点故障。</h2><p>单点故障会导致故障发生时服务或服务的多个部分不可用。优先采用无状态的实现。不要把请求或用户指定给特定的服务器。而是要对能够对负载进行处理的一组服务器进行负载均衡。静态hash或者任何的静态服务器任务分配方式，随着时间的流逝都会导致数据和/或查询的倾斜。当同一组内的机器都是可互换的时候，就可以很容易地进行水平扩展。数据库通常都是一个单点，同时在进行互联网级别的服务的设计时，如何进行数据库的扩展依然是最困难的问题。好的设计会使用细粒度分区，同时会禁止跨分区操作使得可以高效地通过多个数据库服务器进行扩展。对所有的数据库状态冗余地存储(至少有一个)到全冗余的热备服务器上，同时要经常在产品环境中进行failover测试。</p>
+<h1 id="自动化管理和配置"><a href="#自动化管理和配置" class="headerlink" title="自动化管理和配置"></a>自动化管理和配置</h1><p>很多服务实现地需要在故障时向运维发报警，依赖人工干预来恢复服务。这种方式的问题首先在于人力成本高，需要7*24小时的运维人员成本。更重要的是，当运维人员需要顶着巨大压力做出重要决定时，大概有20%的概率会出现失误。这种模型既昂贵又容易出错，同时还降低了整体服务的可靠性。</p>
+<p>但面向自动化的设计需要给服务模型强加很多限制。比如，今天的某些大规模服务依赖于一个使用了异步复制进行备份的数据库系统。这样在主本发生故障无法提供服务而需要切换到副本时，会因为复制的异步性丢失一些客户数据。但是如果不failover切换副本则会导致那些数据存储在发生故障的数据库服务器上的用户服务被中断。很难将是否在这种情况下进行fail over进行自动化，因为它需要人为做出判断，并且需要精确地估算出可能丢失的数据量和可能导致的服务中断时长。要想实现自动化，就要付出同步复制的延迟和吞吐率代价。如果这样做了的话，那么failover就变成了一个非常简单的决定：如果主本挂了，那么就将请求路由给副本处理。 这种方式更易于自动化，并且更不容易出错。</p>
+<p>在完成设计和部署后再进行服务的自动化是很困难的。成功的自动化应当是简单和清晰的，易于做出运维判断的。这反过来又取决于细致的服务设计，必要时可以牺牲一些延迟和吞吐量来方便自动化。通常要在这里面的进行权衡也很难的，但是对于大规模服务来说，所带来的运维方面的节省通常也是数量级上的差异。实际上我们看到，当前最手动与最自动的服务在人力开销上的差异多达两个数量级。</p>
+<p>面向自动化设计的最佳实践如下：</p>
+<h2 id="l-Be-restartable-and-redundant。"><a href="#l-Be-restartable-and-redundant。" class="headerlink" title="l  Be restartable and redundant。"></a>l  Be restartable and redundant。</h2><p>所有操作都应是可重做的(restartable)，所有持久化状态都需要进行冗余性存储。</p>
+<h2 id="l-支持地理分布式。"><a href="#l-支持地理分布式。" class="headerlink" title="l  支持地理分布式。"></a>l  支持地理分布式。</h2><p>所有的大规模服务都应当支持跨数据中心运行。坦率地讲，我们这里提到的自动化和大多数的高效率即使是在没有地理分布的情况下也是可能的。但是跨数据中心部署能力的缺乏将会大幅推高运维成本。没有地理分布式的支持，就很难通过将负载迁到另一个数据中心来减轻当前数据中心的压力。地理分布式的缺乏，是一种会推高成本的运维限制。</p>
+<h2 id="l-自动配置和安装。"><a href="#l-自动配置和安装。" class="headerlink" title="l  自动配置和安装。"></a>l  自动配置和安装。</h2><p>配置和安装，如果是手动完成的话，成本高且易发生问题，同时细小的配置差异会慢慢延伸到整个服务，使得问题越来越难以定位。</p>
+<h2 id="l-将配置和代码作为一体。"><a href="#l-将配置和代码作为一体。" class="headerlink" title="l  将配置和代码作为一体。"></a>l  将配置和代码作为一体。</h2><p>保证：</p>
+<p>n  开发团队将配置和代码作为同一个单元进行提供</p>
+<p>n  该单元的部署测试会以与完全与运维人员线上部署方式相一致的形式进行</p>
+<p>n  运维人员将它们作为同一个单元进行部署</p>
+<p>那些将配置和代码作为同一个单元，且对它们一块进行变更管理的服务会更可靠。</p>
+<p>l  如果必须要在产品环境中进行某项配置变更，要保证所有的变更都会有相应的审计记录，以确保清楚地知道进行了哪些变更，以及谁，何时进行的，受影响的服务器有哪些(见2.7节)。经常扫描所有服务器以确保它们的状态与期望状态相一致。这有助于捕获安装和配置故障，尽早检测到服务器配置错误，发现未经审计的服务器配置变化。</p>
+<h2 id="l-Manage-server-roles-or-personalities-rather-than-servers。"><a href="#l-Manage-server-roles-or-personalities-rather-than-servers。" class="headerlink" title="l  Manage server roles or personalities rather than servers。"></a>l  Manage server roles or personalities rather than servers。</h2><p>每个role或personality应该能支持按需增减服务器数。</p>
+<h2 id="l-多系统同时故障会经常发生。"><a href="#l-多系统同时故障会经常发生。" class="headerlink" title="l  多系统同时故障会经常发生。"></a>l  多系统同时故障会经常发生。</h2><p>要意识到某些故障可能会同时影响到很多主机(电力，交换机，上线)。不幸的是，具有状态的服务，也不可避免的是对拓扑敏感的。关联故障仍会是现实存在的。</p>
+<h2 id="l-在服务级进行恢复。"><a href="#l-在服务级进行恢复。" class="headerlink" title="l  在服务级进行恢复。"></a>l  在服务级进行恢复。</h2><p>在服务级别上进行故障处理和错误纠正，保证完整的上下文执行环境可用，而不是更低的软件层上进行。比如，将冗余构建到服务中，而不是依赖于在更低的软件层上进行的恢复。</p>
+<h2 id="l-永远不要依赖本机存储不可恢复的信息。"><a href="#l-永远不要依赖本机存储不可恢复的信息。" class="headerlink" title="l  永远不要依赖本机存储不可恢复的信息。"></a>l  永远不要依赖本机存储不可恢复的信息。</h2><p>始终坚持对非临时的服务状态进行备份。</p>
+<h2 id="l-保持部署过程的简单。"><a href="#l-保持部署过程的简单。" class="headerlink" title="l  保持部署过程的简单。"></a>l  保持部署过程的简单。</h2><p>文件拷贝是理想方案，因为它提供了最大的部署灵活性。最小化外部依赖。避免复杂部署脚本。应当避免禁止在同一个服务器上运行不同组件或相同组件的不同版本的行为。</p>
+<h2 id="l-Fail-services-regularly。"><a href="#l-Fail-services-regularly。" class="headerlink" title="l  Fail services regularly。"></a>l  Fail services regularly。</h2><p>停掉数据中心，关掉机架，以及关闭服务器电源。定期引入人为的故障，不断暴露出系统，网络和服务的弱点。不想在生产环境下进行测试的服务，也是没有信心保证服务可以经历故障的考验的。同时如果没有生产测试，故障恢复就没办法在需要的时候工作。</p>
+<h1 id="依赖管理"><a href="#依赖管理" class="headerlink" title="依赖管理"></a>依赖管理</h1><p>大规模服务中的依赖管理通常得不到所应有的关注。一般来说，小的组件或服务的依赖又不足以证明或显示依赖管理所带来的复杂性。只有在如下情况下，依赖才会显得有意义：</p>
+<ol>
+<li><p>依赖的组件很大或者很复杂</p>
+</li>
+<li><p>依赖的服务的价值在于它是单一中心实例</p>
+</li>
+</ol>
+<p>第一种情况的实例是存储和一致性算法实现。第二种情况的实例是身份和组管理系统。这些系统的价值在于，它们是单一的共享实例，无法采用多实例避免这种依赖。</p>
+<p>假设依赖关系满足上述规则，一些管理它们的最佳实践如下：</p>
+<h2 id="l-Expect-latency。"><a href="#l-Expect-latency。" class="headerlink" title="l  Expect latency。"></a>l  Expect latency。</h2><p>调用外部组件可能会花很长时间完成。不要让一个组件或服务的延迟造成完全不相关的地方的延迟。确保所有的交互有合适的超时，避免长期占用某项资源。操作幂等性允许超时后重启请求，即使请求已经部分或完全完成。确保汇报所有的请求重启。限制重启次数，避免反复失败的请求消耗过多系统资源。</p>
+<h2 id="l-故障隔离。"><a href="#l-故障隔离。" class="headerlink" title="l  故障隔离。"></a>l  故障隔离。</h2><p>站点的架构必须能够防止级联失败。总是“fail fast”的。依赖的服务发生了故障，就标记为不可用并不再使用它们，以免线程一直等待失败的组件。</p>
+<h2 id="l-使用经验证的稳定的组件。"><a href="#l-使用经验证的稳定的组件。" class="headerlink" title="l  使用经验证的稳定的组件。"></a>l  使用经验证的稳定的组件。</h2><p>经过验证的技术总是要好过刀口舔血。稳定版的软件总是要比尝鲜版更好，无论新feature看起来多么诱人。该规则也同样适用于硬件。</p>
+<h2 id="l-实现内部服务的监控和报警。"><a href="#l-实现内部服务的监控和报警。" class="headerlink" title="l  实现内部服务的监控和报警。"></a>l  实现内部服务的监控和报警。</h2><p>如果服务正在使得它所依赖的服务过载，被依赖的服务需要能够知道这种情况，并且如果它不能自动对过载进行处理还需要发送报警。如果运维人员也无法快速解决问题，还需要能够迅速联系到来自两个团队的工程师。所有关联团队都应该保证有工程师可以被随时联系到。</p>
+<h2 id="l-被依赖的组件需要有同样的设计出发点。"><a href="#l-被依赖的组件需要有同样的设计出发点。" class="headerlink" title="l  被依赖的组件需要有同样的设计出发点。"></a>l  被依赖的组件需要有同样的设计出发点。</h2><p>被依赖的服务以及被依赖的组件的生产者至少需要跟依赖者达成一样的SLA。</p>
+<h2 id="l-组件解耦。"><a href="#l-组件解耦。" class="headerlink" title="l  组件解耦。"></a>l  组件解耦。</h2><p>在可能的情况下，确保组件在其他组件发生故障时可以继续工作，可能是以降级模式。例如，不是对每个连接都重新做认证，而是维护一个会话密钥，每几个小时更新一下连接状态。这样认证服务器的负载会更一致，同时也保证了在短暂网络故障后的重连不会造成登录风暴。</p>
+<h1 id="发布周期和测试"><a href="#发布周期和测试" class="headerlink" title="发布周期和测试"></a>发布周期和测试</h1><p>在生产环境下的测试是必需的，所有的大规模服务都应该把它作为QA方案的一部分。对于大多数服务来说，都至少会有一个尽可能接近生产的测试环境，同时所有优秀的工程团队都会用实际的生产负载来驱动测试系统。但我们的经验表明，无论测试环境有多好，总是不可能会与生产环境完全一致。与生产相比，总是或多或少会有些差别。随着测试环境与生产系统的接近，成本也会逐步与生产系统相当。</p>
+<p>我们推荐在新版本服务经过标准单元测试、功能测试和类生产环境测试后，就到一个受限的生产环境下进行最后的测试。当然，我们都不想进入生产环境的软件无法工作，或者是给数据一致性带来风险，因此这一切都务必要小心翼翼。严格遵守以下规则：</p>
+<ol>
+<li><p>生产系统要有足够的冗余，当新服务发生灾难性故障时，可以快速恢复状态。</p>
+</li>
+<li><p>绝对不能破坏数据或状态一致性(必须先要经过严格的功能测试)</p>
+</li>
+<li><p>错误必须能够被检测到，同时工程团队(而不是运维)必须持续监控受测代码的系统状态</p>
+</li>
+<li><p>保证所有变更都能被快速回滚，同时在上线之前回滚步骤也必须经过测试</p>
+</li>
+</ol>
+<p>这看起来很危险。但是我们发现，使用这种技术实际上能够改善新版本发布时的用户体验。部署时不求快，而是先把一个数据中心的某个生产系统升级，测试几天。然后再把所有数据中心的该系统升级。然后再把某个数据中心的所有系统升级。最后，如果质量和性能符合预期，再升级其它数据中心。这样就可以在服务处于危险之前发现问题，同时也可以切实地在版本过渡阶段为客户提供更好的用户体验。一刀切(Big-bang)的部署方式是非常危险的。</p>
+<p>我们青睐的另一种可能违反直觉的方式是，在每天正午而不是半夜部署。在晚上部署，出错的风险更高，而且在半夜部署时如果有异常情况突然发生，那么能处理这些问题的工程师肯定会少些。这样做的目标是为了最小化开发和运维人员与系统的总体交互次数，尤其在正常工作日之外的，降低成本的同时，质量也得到提高。</p>
+<p>一些发布周期和测试方面的最佳实践：</p>
+<h2 id="l-经常进行发布。"><a href="#l-经常进行发布。" class="headerlink" title="l  经常进行发布。"></a>l  经常进行发布。</h2><p>直觉上看，人们可能会认为发布越频繁会越困难，同时也越容易出错。但是，我们却发现发布越频繁大爆炸(big-bang)式的变更会越少。这样发布的质量倾向于更高，客户的体验也会更好。一次良好发布的酸性测试(acid test)，应该是用户体验可能发生变化，但是围绕着可用性和延迟的运维性问题数在整个发布周期内应该保持不变。我们比较喜欢以三个月为一个发布周期，但是也可以视具体情况作出调整。我们感觉，正常来说都应该是不多于3个月，而且有些服务已经是在以周为单位进行发布了。如果周期超过3个月，通常都是很危险的。</p>
+<h2 id="l-利用线上数据发现问题。"><a href="#l-利用线上数据发现问题。" class="headerlink" title="l   利用线上数据发现问题。"></a>l   利用线上数据发现问题。</h2><p>大规模系统中的质量保证，是个数据挖掘和可视化问题，而不是测试问题。每个人都应该专注于如何从生产环境中的大量数据中获取到最有价值的信息。可以采用如下一些策略：</p>
+<p>n  可衡量的发布标准。定义出关于所期望的用户体验的具体标准并持续监测它。如果可用性目标设定为99%，那么就对可用性进行测量看它是否达标。如果无法达标，要进行报警和诊断。</p>
+<p>n  始终对实际数字进行收集。收集实际的度量值，而不是那些红红绿绿的图或其他形式的摘要报告。摘要和图表有用，但是对于问题诊断来说还是需要原始数据。</p>
+<p>n  最小化“false positives(误报)”。在数据不正确时，人们很快就会放弃对它的关注。不过度报警很重要，否则运维人员很快就会习惯于忽略它们。这非常重要，以至于即使是附带地把某些真实问题隐藏掉也是可以接受的。</p>
+<p>n  分析趋势。这个可以用来预测问题。例如，当系统中的数据流动速率异于往常时，通常预示着更大的问题。仔细挖掘现有的可用数据。</p>
+<p>n  使系统健康程度保持高度可见。需要为整个组织提供一个随处可查并实时显示的系统健康状况报告。构建一个内部网站，使得大家可以随时查看当前系统状态。</p>
+<p>n  持续监控。值得一提的是，人们必须要每天查看这些监控数据。每个人都应该这样做，但是也要为这项工作明确地指定某些负责人。</p>
+<h2 id="l-加大工程投入。"><a href="#l-加大工程投入。" class="headerlink" title="l  加大工程投入。"></a>l  加大工程投入。</h2><p>良好的工程化可以最小化运维需求，同时可以将问题消除在萌芽状态。非常常见的一个现象是，组织通过不断地扩大运维团队来解决规模问题，而不是花时间设计实现一个可伸缩的、可靠的系统。那些起初没有考虑过大规模问题的服务，往往后面都会变得手忙脚乱。</p>
+<h2 id="l-支持版本回滚。"><a href="#l-支持版本回滚。" class="headerlink" title="l  支持版本回滚。"></a>l  支持版本回滚。</h2><p>版本回滚支持应是强制性的，同时在上线之前必须经过测试和证明。如果没有回滚支持，任何形式的生产级测试都将是非常危险的。回滚到前一版本就像降落伞上的“开伞索”，应保证它在任意部署中都是可用的。</p>
+<h2 id="l-保持向前和向后兼容性。"><a href="#l-保持向前和向后兼容性。" class="headerlink" title="l  保持向前和向后兼容性。"></a>l  保持向前和向后兼容性。</h2><p>{!Forwards Compatibility，向前兼容。Forward有“将来”的含义，因此是指以前的版本支持现在版本生成的数据，现在的版本支持以后的版本数据。Backwards Compatibility，向后兼容。Backward有“回头”的意思，所以是指现在的版本可以支持以前的版本数据}。这一点与前面一点非常相关。对文件格式、接口、日志/调试信息、仪表、监控和组件间的连接点进行的改变，都是潜在的风险。不要丢掉对旧文件格式的支持，否则未来将没有机会回滚到老版本。</p>
+<h2 id="l-单机部署支持。"><a href="#l-单机部署支持。" class="headerlink" title="l  单机部署支持。"></a>l  单机部署支持。</h2><p>这既是测试的需求也是开发的需求。整个服务必须可以很容易地托管到单一系统中。对于某些单服务器无法实现的组件(比如，它依赖于一个外部的、不支持单机部署的服务)，需要为它编写模拟器以支持单机部署。如果不支持这点，那么单元测试将很难进行，同时也没法完全展开。同时，如果运行整个系统很困难，开发人员也会倾向于在组件的级别上进行开发，而不是系统级。</p>
+<h2 id="l-针对负载进行压力测试。"><a href="#l-针对负载进行压力测试。" class="headerlink" title="l  针对负载进行压力测试。"></a>l  针对负载进行压力测试。</h2><p>采用两倍(或更多)的负载来运行生产系统的某些子集，确保系统在高于预期负载情况下的行为仍然是可理解的，以及不会随着负载的上升而宕掉。</p>
+<h2 id="l-在新发布之前进行容量和性能测试。"><a href="#l-在新发布之前进行容量和性能测试。" class="headerlink" title="l  在新发布之前进行容量和性能测试。"></a>l  在新发布之前进行容量和性能测试。</h2><p>除了要在服务级上进行，还要对每个组件进行，因为负载特征会随着时间发生变化。需要尽早捕获系统内部的问题及退化现象。</p>
+<h2 id="l-增量地迭代地进行构建和部署。"><a href="#l-增量地迭代地进行构建和部署。" class="headerlink" title="l  增量地迭代地进行构建和部署。"></a>l  增量地迭代地进行构建和部署。</h2><p>在开发的早期阶段，先把整个服务的骨架先搭建好。这个完整的服务可能几乎做不了什么，但是它可以让测试和开发人员更具有产品思维，可以一开始就站在用户的角度思考问题。在构建软件系统时这是一个非常好的实践，但对于服务来说更尤其重要。</p>
+<h2 id="l-采用真实数据进行测试。"><a href="#l-采用真实数据进行测试。" class="headerlink" title="l  采用真实数据进行测试。"></a>l  采用真实数据进行测试。</h2><p>将生产环境中的用户请求和工作负载搬到测试环境中。挑选一些生产数据，并将它们放到测试环境中。多样化的真实用户群体在发现bug上总是更有创造力。显然，必须要进行隐私承诺，非常关键的是保证数据永远不会泄露回到生产系统中。</p>
+<h2 id="l-运行系统级验收测试。"><a href="#l-运行系统级验收测试。" class="headerlink" title="l  运行系统级验收测试。"></a>l  运行系统级验收测试。</h2><p>在本地运行一些可以加速迭代开发过程的完整性检查。为避免产生繁重的维护成本，它们都应当是系统级的。</p>
+<h2 id="l-在完整环境中进行测试开发。"><a href="#l-在完整环境中进行测试开发。" class="headerlink" title="l  在完整环境中进行测试开发。"></a>l  在完整环境中进行测试开发。</h2><p>留出一定的硬件，以可以进行特定规模的测试。最重要的是，在这些环境中使用那些与生产系统相同的数据集合和挖掘技术，以最大化资源投入的价值。</p>
+<h1 id="硬件选型和标准化"><a href="#硬件选型和标准化" class="headerlink" title="硬件选型和标准化"></a>硬件选型和标准化</h1><p>采用SKU(Stock Keeping Unit，库存单元)标准化的常见理由是，批量采购可以节省大量的金钱。毋庸置疑这是正确的。但是硬件标准化的更大需要是，它可以支持更快的服务部署及规模增长。如果每个服务都是自己采购的基础设施，那么它们将需要：</p>
+<ol>
+<li><p>确定哪些硬件当前具有最好的性价比</p>
+</li>
+<li><p>订购这些硬件</p>
+</li>
+<li><p>一旦硬件被安装到数据中心，进行硬件认证及软件部署</p>
+</li>
+</ol>
+<p>这通常要花一个月，同时很容易就会花更多时间。</p>
+<p>更好的方法是采用包含了硬件SKUs、自动化管理和配置设施的“services fabric”，让所有服务运行在它之上。如果一个测试集群需要添加更多机器，可以通过网页服务来提交请求，之后很快就直接可用了。如果一个小服务越来越成功，也可以从现有机器池里添置资源。</p>
+<p>这种方法保证了如下两个关键原则：1)所有服务，甚至是小服务，都在使用自动化管理和配置设施；2)新服务可以非常快的进行部署和测试。</p>
+<p>针对硬件选型的最佳实践如下：</p>
+<h2 id="l-只使用标准SKUs。"><a href="#l-只使用标准SKUs。" class="headerlink" title="l  只使用标准SKUs。"></a>l  只使用标准SKUs。</h2><p>如果生产系统中只有单个或少量SKU，就可以实现资源在服务间的按需流转。成本效益最好的模式是开发一种包含了自动化管理和配置、硬件以及一组标准共享服务集合的标准服务托管框架。标准化SKUs是实现该目标的核心要求。</p>
+<h2 id="l-整机柜采购。"><a href="#l-整机柜采购。" class="headerlink" title="l  整机柜采购。"></a>l  整机柜采购。</h2><p>采购硬件应该以机柜或多个机柜为单位进行配置和测试。在大多数数据中心，机器组柜和堆垛成本是非常高的，因此要让系统制造商以机柜为单位进行交付。</p>
+<h2 id="l-硬件抽象。"><a href="#l-硬件抽象。" class="headerlink" title="l  硬件抽象。"></a>l  硬件抽象。</h2><p>将服务编写地只是依赖于抽象的硬件描述。而不需要完全暴露硬件SKU，服务既不应该暴露SKU，也不应该依赖于它的内部细节。这样才可以在具有更高性价比的系统可用时，将现有设备替换掉。SKU应当只是一个包含了CPU和磁盘数，及最低内存要求的抽象描述。更细粒度上的SKU信息不应该被利用。</p>
+<h2 id="l-对网络和命名服务进行抽象。"><a href="#l-对网络和命名服务进行抽象。" class="headerlink" title="l  对网络和命名服务进行抽象。"></a>l  对网络和命名服务进行抽象。</h2><p>使用DNS和CNAMEs尽可能地将网络和命名进行抽象。始终坚持使用CNAME。硬件可能损坏、到期或挪作它用。在代码的任何地方都不要依赖于机器的名称。改变DNS中的CNAME要与需要改变配置文件甚至是代码相比，要容易得多。如果需要避免更新(Flush)DNS缓存，需要记得将TTL{! Time-To-Live，简单的说它表示一条域名解析记录在DNS服务器上的缓存时间.当各地的DNS服务器接受到解析请求时，就会向域名指定的DNS服务器发出解析请求从而获得解析记录；在获得这个记录之后，记录会在DNS服务器中保存一段时间，这段时间内如果再接到这个域名的解析请求，DNS服务器将不再向DNS服务器发出请求，而是直接返回刚才获得的记录；而这个记录在DNS服务器上保留的时间，就是TTL值}设得足够低以保证变更可以尽可能快地被push。</p>
+<h1 id="运维和容量规划"><a href="#运维和容量规划" class="headerlink" title="运维和容量规划"></a>运维和容量规划</h1><p>要高效地运维服务，关键在于构建系统时消除各种需要运维交互的过程。目标在于让一个高可靠的，7<em>24小时可用的服务只需要5</em>8小时工作的运维团队维护即可。</p>
+<p>但是，可能会发生不寻常的故障，而且系统或多个系统可能会无法恢复在线工作。要理解这种可能性的发生，并将受损系统的下线过程自动化。依赖于运维人员手动更新SQL表或者是使用特别的技术移动数据，都可能会招致灾难。处理故障的过程中也容易产生失误。运维团队需要预料遇到各种故障时的正确应对方式，并将这些过程提前进行编写和测试。一般来说，开发团队要将紧急恢复操作自动化</p>
+<p>，并必须要对它们进行测试。很明显，无法将所有的故障都提前预料到，但是通常通过一小组恢复动作的集合就可以从类型广泛的故障中恢复过来。本质上来说，是需要构建和测试可以根据故障范围和危害以不同方式使用及组合的“恢复内核”。</p>
+<p>恢复脚本需要在生产环境下测试。没有经过频繁测试的东西是无法工作的，因此不要实现团队没有勇气去使用的任何东西。如果在生产环境下测试的风险太高，那么说明脚本要么是没准备好，要么是在紧急情况下使用时也不会安全。这里的关键点是，灾难总是在发生，同时那些因为恢复步骤未按预期执行而导致由小灾难演变为大灾难的情况也是屡见不鲜。要预料到这些情况，并且要能在不造成更多的数据丢失和不服务时间的前提下，将服务恢复过程自动化。</p>
+<h2 id="l-增强开发团队责任感。"><a href="#l-增强开发团队责任感。" class="headerlink" title="l  增强开发团队责任感。"></a>l  增强开发团队责任感。</h2><p>在这方面，Amazon应该算是最激进的了，他们的格言是“you built it, you manage it”。他们的主张要比我们现在所采用的方式稍微强些，但是这无疑是一个正确的方向。如果开发总是被在午夜吵醒，那么自动化就会是必然结果。但是如果是运维被吵醒，通常的反应是扩充运维团队。</p>
+<h2 id="l-只进行软删除。"><a href="#l-只进行软删除。" class="headerlink" title="l  只进行软删除。"></a>l  只进行软删除。</h2><p>绝不要删除任何东西，只是将它们标记为已删除。当有新数据进来时，将请求记录下来。保存一个以两周(或更长时间)为单位滚动的变更历史记录，以便从软件或操作错误中恢复。比如有谁犯了错，忘记在delete语句中加上where子句(以前曾经发生过并且也难保将来不会再发生)，数据的所有逻辑拷贝都会被删除。RAID和镜像都无法防止这种形式的错误。数据恢复能力可以让一个原本非常严重的问题变成一个微小的，不起眼的问题。对于那些已经进行了离线备份的系统来说，只需要额外记录那些上次备份之后进来的数据即可。但是，谨慎起见，多备份一些会更保险。</p>
+<h2 id="l-跟踪资源分配。"><a href="#l-跟踪资源分配。" class="headerlink" title="l  跟踪资源分配。"></a>l  跟踪资源分配。</h2><p>理解容量规划中的额外负载带来的成本开销。每个服务都应该开发一些像并发在线用户、每秒请求数或者其他的一些相关指标。无论是何种指标，都需要在负载的此种测量方法和所需的资源之间有一个直接的已知关系。所估计的负载数应通过销售和市场团队的反馈得到，同时将会被运维团队用来进行容量规划。不同的服务具有不同的变化速度，同时有不同的订购周期要求。对于我们的服务来说，每90天会更新一下市场预测，每30天更新一次容量规划和订购需求。</p>
+<h2 id="l-一次只进行一个变更。"><a href="#l-一次只进行一个变更。" class="headerlink" title="l  一次只进行一个变更。"></a>l  一次只进行一个变更。</h2><p>碰到问题时，应该一次对环境只做一个变更。这看起来显而易见，但是我们也多次看到过因多个变更导致的因果关系无法确定的情况发生。</p>
+<h2 id="l-使所有东西可配置。"><a href="#l-使所有东西可配置。" class="headerlink" title="l  使所有东西可配置。"></a>l  使所有东西可配置。</h2><p>任何可能在产品系统中发生改变的东西都应该是在生产环境下可配置和调整的，而不需要改变代码。即使某个值看起来没有很好的在生产环境中发生变更的理由，如果很容易的话也应让它可配置。但是不要在生产环境中随意更改它们，同时应该对系统连同那些将在生产系统中使用的配置一块进行严格的测试。但是当生产出现问题时，与编码、编译、测试、部署相比，简单地修改下配置总是要更简单、安全、快速。</p>
+<h1 id="审计、监控和报警"><a href="#审计、监控和报警" class="headerlink" title="审计、监控和报警"></a>审计、监控和报警</h1><p>运维人员无法在部署中再对服务进行调整(instrument)。在开发过程中要付出足够的努力，来确保系统中的所有组件都可以产生相应的性能数据、健康数据以及吞吐率等数据。</p>
+<p>在任何有配置变更发生的时候，都要在审计日志中记录下改了什么，谁改的，什么时间改的。在生产环境出现异常时，第一个要回答的问题就是最近到底进行过哪些变更。如果没有审计跟踪，那么答案通常是“没有改过什么”，而通常最可能的情况就是正是因为某个变更导致了问题。</p>
+<p>报警是一门艺术。有一种倾向就是对所有事件进行报警，开发者期望可以从中发现有趣的事情，这就导致很多服务的第一版通常都会产生大量根本没人会看的无用报警信息。要提高效率，每个报警都应该对应着一个问题。否则，运维团队将会习惯于将它们忽略。我们不知道除了交互式地对报警条件进行调整外，还有何灵丹妙药可以让每个报警都正确，以保证所有关键事件都会被报警，在不需要采取任何措施的情况下就不报警。要得到正确的报警级别，有两个指标可能会有帮助，并值得进行追踪：</p>
+<pre><code>1)报警和实际故障比(理想情况它的值应接近1)；
+2)没有产生相应报警的系统故障数(理想情况它的值应接近0)。
+</code></pre><h2 id="l-Instrument-everything。"><a href="#l-Instrument-everything。" class="headerlink" title="l  Instrument everything。"></a>l  Instrument everything。</h2><p>对通过系统的每个客户交互和事务进行监测，并报告异常。这是一个“runners”(可以合成工作负载来模拟生产环境中的用户交互)可以施展的地方，但是仅有它们还不够。如果只使用runners，我们曾看到一个严重问题甚至需要几天时间才被发现，因为标准工作负载一直被处理得很好，然后还要再花几天时间才能查到原因。</p>
+<h2 id="l-数据是最有价值的资产。"><a href="#l-数据是最有价值的资产。" class="headerlink" title="l  数据是最有价值的资产。"></a>l  数据是最有价值的资产。</h2><p>如果对系统正常行为没有很好的理解，那么在它发生异常时也没法很好地进行处理。需要对关于系统行为的大量数据进行收集以确定系统状态是否正常。很多服务都经历过灾难性的故障，但是只有在电话铃响起时，人们才意识到故障的发生。</p>
+<h2 id="l-具有服务的客户视角。"><a href="#l-具有服务的客户视角。" class="headerlink" title="l  具有服务的客户视角。"></a>l  具有服务的客户视角。</h2><p>进行E2E测试。仅有Runners虽不足够，但是它们可以用来确保服务在完整运行。确保复杂和重要的路径能够被Runners测试到。避免误报，如果Runners的失败可以被忽略，那么就修改测试使得它是不可忽略的。再次强调一下，一旦人们习惯了忽略数据，以后即使再真的发生也无法再得到及时的关注。</p>
+<h2 id="l-对生产环境测试进行监测。"><a href="#l-对生产环境测试进行监测。" class="headerlink" title="l  对生产环境测试进行监测。"></a>l  对生产环境测试进行监测。</h2><p>要想安全地在生产环境中进行测试，需进行完整的测试和监控。如果组件发生了故障，需要能够快速地监测到。</p>
+<h2 id="l-延迟是最棘手的问题。"><a href="#l-延迟是最棘手的问题。" class="headerlink" title="l  延迟是最棘手的问题。"></a>l  延迟是最棘手的问题。</h2><p>比如像IO缓慢，虽未成故障但是处理变慢这样的问题。这些都很难发现，需仔细进行监测才能发现。</p>
+<h2 id="l-要有足够的生产数据。"><a href="#l-要有足够的生产数据。" class="headerlink" title="l  要有足够的生产数据。"></a>l  要有足够的生产数据。</h2><p>为了找到问题，数据必须是可用的。及早构建细粒度的监控，否则后面进行改造的成本会很高。我们所依赖的重要数据包括：</p>
+<p>n  为所用操作采用性能计数器。至少要将操作延迟及每秒的操作数记录下来。这些数据的起伏通常是一个危险信号。</p>
+<p>n  对所有数据进行审计跟踪。每当某人做了某事，尤其是重要之事，都要进行记录。这样做主要有两个目的：首先，日志可以用来进行挖掘以找出用户经常进行哪些操作(在我们的例子中，就是他们经常进行何种查询)；其次，可以用它来在发现问题时帮助进行debug。</p>
+<p> 与此相关的一个观点:如果所有人都使用同一个账号来管理系统，这样做不会带来太多好处。一个非常糟糕的想法，但是并不罕见。</p>
+<p>n  跟踪所有容错机制。容错机制会将故障隐藏。每当重试发生，或将数据从一个地方拷贝到另一个地方，或机器重启以及服务重启时，都进行跟踪。在容错机制隐藏了小故障时，要能了解到并对它进行追踪，防止小故障演变成大故障。我们曾经有一个2000台机器的服务在几天内慢慢地下降到只有400台可用，但是一开始却没人注意到。</p>
+<p>n  跟踪针对重要实体的所有操作。为发生在每个重要实体上的事件记录一个“审计日志”，无论实体是一个文档还是多个文档组成的集合。在运行数据分析时，通常能够通过数据发现异常。要了解数据的来源及其所经过的处理过程。到了项目后期再添加这些功能会变得特别困难。</p>
+<p>n  断言。自由地在整个产品中使用断言。收集产生的日志以及程序奔溃后的core文件，并对它们进行研究。对于那些在同一个进程边界内运行了多个服务，以及无法使用断言的地方，要写下追踪记录。</p>
+<p>n  保留历史数据。历史上的性能和日志数据对于趋势分析和问题诊断来说都是非常必要的。</p>
+<h2 id="l-日志可配置。"><a href="#l-日志可配置。" class="headerlink" title="l  日志可配置。"></a>l  日志可配置。</h2><p>支持可配置的日志，日志可以根据调试需求选择性地打开、关闭。在故障期间去部署具有额外监控的新构建版本是非常危险的。</p>
+<h2 id="l-向监控系统暴露健康信息。"><a href="#l-向监控系统暴露健康信息。" class="headerlink" title="l  向监控系统暴露健康信息。"></a>l  向监控系统暴露健康信息。</h2><p>考虑多种从外部对系统健康状况进行监控的方法，并使之易于在生产环境下进行监控。</p>
+<h2 id="l-保证所有被报告的错误都有与之相应的处理动作。"><a href="#l-保证所有被报告的错误都有与之相应的处理动作。" class="headerlink" title="l  保证所有被报告的错误都有与之相应的处理动作。"></a>l  保证所有被报告的错误都有与之相应的处理动作。</h2><p>问题会发生。事情会出错。如果代码中的一个不可恢复的错误被检测到并记入日志，或者是报告为错误，错误信息应该能揭示错误产生的可能原因及建议的处理方法。不具备可操作性的错误报告是无用的，并且时间长了它们会被忽略，而真正的故障将会被错过。</p>
+<h2 id="l-实现生产问题的快速诊断。"><a href="#l-实现生产问题的快速诊断。" class="headerlink" title="l  实现生产问题的快速诊断。"></a>l  实现生产问题的快速诊断。</h2><p>n  为诊断提供足够信息。当问题被标记出来时，提供足以让人进行诊断的信息。否则，进入门槛将会过高，同时标记也会被忽略。比如不要仅仅是说“有10个查询没有返回结果”，还需再加上“下面是它们的列表及问题出现次数”。</p>
+<p>n  证据链。确保有一个可以让开发人员进行问题诊断的从头到尾的完整路径。这通常是通过日志实现的。</p>
+<p>n  在生产环境中进行debug。我们更喜欢这样一种模式，在该模式中，系统几乎从不会被包括运维在内的任何人直接触碰，而debug是通过让系统产生快照，将内存内容dump出来，然后转移出生产环境再进行的。当在生产环境中进行debug是唯一选择时，开发者则是不二人选。确保他们对于可以在生产环境中做哪些事情是经过严格培训的。我们的经验表明，系统在生产环境中被触碰地越少，客户满意度越高。因此我们建议，一定要竭尽全力避免对生产环境中的系统进行改动。</p>
+<p>n  记录所有的重要动作。每当系统执行重要动作时，尤其是在收到网络请求或修改数据时，要记录下发生的事情。包括用户何时发送了命令以及系统内部做了什么。有了这些记录，对问题调查大有裨益。更重要的是，还可以开发出挖掘工具来找到有用的聚合结果，比如当前的用户正在执行哪些种类的查询(比如，哪些关键字，多少关键字等等)。</p>
+<h1 id="优雅降级和准入控制"><a href="#优雅降级和准入控制" class="headerlink" title="优雅降级和准入控制"></a>优雅降级和准入控制</h1><p>有些时候比如受到DOS攻击或使用模式发生某些改变时，会导致负载突然爆发。服务需要能够进行优雅降级及准入控制。比如在9.11期间，大多数新闻服务都崩溃了，无法为任何用户提供可用的服务。与此相比，就算是仅能够提供所有文章的一部分子集也是一个更好的选择。两个最佳实践，“big red switch”和准入控制，需要针对每个服务进行量身定制。但是这两个都是非常强大和必要的。</p>
+<h2 id="l-支持“big-red-switch”。"><a href="#l-支持“big-red-switch”。" class="headerlink" title="l  支持“big red switch”。"></a>l  支持“big red switch”。</h2><p>“big red switch”的想法最初源自于Windows Live Search团队，它非常强大。我们对它进行了一些扩展，使得它可以应用在那些与搜索具有显著不同的事务型服务中。这个想法非常强大，实际上可以应用到任何地方。大体来说，“big red switch”是一种当服务不再满足它的SLA或迫在眉睫时，可采取的经过设计和测试的动作。将优雅降级比喻为“big red switch”，稍微有些不太恰当，但核心的意思是指那种可以在紧急情况下摒弃那些非关键负载的能力。</p>
+<p>“big red switch”概念是以丢弃或延迟非关键负载为代价，保证关键处理过程能继续进行的关键。根据设计，这种情况应永不发生，但是当真的发生时这也不失为一个好方法。等到服务已处于危险的情况下，再考虑这些就太迟了。如果有些负载可以被暂时放入队列后面再处理，那这也可以作为“big red switch”的候选。另外如果在关闭高级查询的情况下，事务可以继续执行，那这也可以作为一个候选。关键在于确定碰到问题时系统所需的最小集合，然后实现关闭那些不必要的服务的开关，并进行测试。需要注意的是，正确的“big red switch”应是可逆的。同时应对开关的重置进行测试，确保所有服务可以回到完整服务状态，包括所有的批处理任务及先前被暂停的非关键工作。</p>
+<h2 id="l-准入控制。"><a href="#l-准入控制。" class="headerlink" title="l  准入控制。"></a>l  准入控制。</h2><p>第二个重要概念是准入控制。如果当前的负载系统已经无法处理了，那么再往系统中增加负载也只是会让更多的用户产生糟糕的体验。如何实现这一点与系统本身有关，某些系统比其他系统更容易完成。以电子邮件处理服务为例，如果系统已经超负荷，并开始排队，此时最好不要再接收邮件而是让它们在来源队列中等候。这样可以产生效果并能实际减少总体服务延迟的关键原因是，如果队列形成处理时间会变更慢。如果我们不允许队列的建立，那么吞吐量将会更高。另一种技术是：提供服务时高端用户优先于非高端用户，注册用户优先于访客，或者是访客优于用户如果是以“试用和购买”为商业模型的话。</p>
+<h2 id="l-准入计量。"><a href="#l-准入计量。" class="headerlink" title="l  准入计量。"></a>l  准入计量。</h2><p>另一个非常重要概念是上面所确定的准入控制点的修改。如果系统发生故障并宕机，为确保一切正常恢复时必须能够缓缓进行。比如先让一个用户进入，然后每秒允许10个用户进入，如此慢慢加大。对于每个服务来说，拥有一个细粒度的旋钮可以在重新上线或从灾难性失败中恢复时缓慢增加使用量，是至关重要的。在任何服务的第一个版本中很少会包含这种能力。对于一个有客户的服务来说，一定有方法来通知它的客户暂时无法提供服务以及何时会恢复。这就允许客户端在可以接受的情况下继续修改本地数据，同时也可以让客户端暂时退下避免干扰服务，让服务可以尽快恢复上线。这样也同时为服务owner提供了一个直接与用户沟通的机会，并可借此调整他们的期望。另外的一个可以避免所有客户端同时涌向服务端的技巧是：故意制造抖动和对每个实体进行自动备份。</p>
+<h1 id="客户和媒体沟通计划"><a href="#客户和媒体沟通计划" class="headerlink" title="客户和媒体沟通计划"></a>客户和媒体沟通计划</h1><p>系统发生故障时，就需要就由此引发的延迟和其他问题与客户进行沟通。沟通应以可选的方式通过多种媒介进行：RSS，网站，即时消息，电子邮件等。对于那些具有客户端的服务来说，让服务具备通过客户端直接与用户联系的能力是非常有用的。可以在特定的时间点或时间段，要求客户端下线。如果支持的话，也可以让客户端运行在连接断开或缓存模式下。可以通过客户端将系统状态告知用户，并说明预计在何时会完全可用。</p>
+<p>即使没有客户端，用户也可以通过其他方式与系统交互，比如通过网页将系统状态公布给用户。如果用户了解什么正在发生，并且对于服务何时恢复也有一个合理的预期，就会大大提高他们的满意度。对于服务提供者来说，有一个想要隐藏系统问题的自然倾向，但是随着时间的推移，我们越来越确信，将服务可用性的信息提供给客户几乎总是可以提高他们的满意度。即使是对于免费系统来说，如果人们可以清楚地知道什么正在发生及何时可以恢复正常，他们就会对服务更有信心而不会轻易放弃使用。</p>
+<p>某些特定类型的事件将会引发媒体报导。如果事先考虑到这些场景做好应对，那么服务将会带给人们更好的印象。像大量数据丢失或损坏，安全入侵，隐私侵犯以及长时间的服务停机等问题都可能引起媒体的关注。事先准备好沟通计划。知道需要与谁、何时、怎么通电话。沟通方案的框架应该提前准备好草案。针对每种类型的灾难，都应该提前准备好沟通计划，包括与谁、何时、如何沟通。</p>
+<h1 id="客户自配置与自助"><a href="#客户自配置与自助" class="headerlink" title="客户自配置与自助"></a>客户自配置与自助</h1><p>客户自配置可以大大降低成本，同时还能提升客户满意度。如果客户可以简单地通过打开网页，输入所需数据，然后就可以开始使用服务，这会比他需要打电话然后在呼叫处理队列里浪费大量时间，满意度要高地多。我们一直觉得主要的移动运营商因为一直未为那些不想致电客户服务的人们提供自助服务，错过了一个既节省成本又可以提高客户满意度的机会。</p>
+<p>总结</p>
+<p>对于大规模互联网服务来说，降低运维成本和提高服务可靠性始于编写运维友好的服务。在本文中，我们定义了何谓运维友好，并总结了来自于从事大规模服务的工程师在服务设计、部署、开发和运维方面的最佳实践。</p>
+</div><script type="text/javascript" src="/js/share.js?v=0.0.0" async></script><a data-url="https://kanmars.github.io/2016/10/19/2016-10-19-Scale-Services/" data-id="ciwjetzgf002y48vqomcqd828" class="article-share-link">Aktie</a><div class="tags"><a href="/tags/server/">server</a><a href="/tags/java/">java</a></div><div class="post-nav"><a href="/2016/10/25/2016-10-25-news-LongRoad/" class="pre">news It's a Long Road</a><a href="/2016/10/18/2016-10-18-dubbo_source_006_summarize/" class="next">[KANMARS原创]-DUBBO源码解析(6)-summarize</a></div><div data-thread-key="2016/10/19/2016-10-19-Scale-Services/" data-title="On Designing and Deploying Internet-Scale Services" data-url="https://kanmars.github.io/2016/10/19/2016-10-19-Scale-Services/" class="ds-share flat"><div class="ds-share-inline"><ul class="ds-share-icons-16"><li data-toggle="ds-share-icons-more"><a href="javascript:void(0);" class="ds-more">分享到：</a></li><li><a href="javascript:void(0);" data-service="weibo" class="ds-weibo">微博</a></li><li><a href="javascript:void(0);" data-service="qzone" class="ds-qzone">QQ空间</a></li><li><a href="javascript:void(0);" data-service="qqt" class="ds-qqt">腾讯微博</a></li><li><a href="javascript:void(0);" data-service="wechat" class="ds-wechat">微信</a></li></ul><div class="ds-share-icons-more"></div></div></div><div data-thread-key="2016/10/19/2016-10-19-Scale-Services/" data-title="On Designing and Deploying Internet-Scale Services" data-url="https://kanmars.github.io/2016/10/19/2016-10-19-Scale-Services/" data-author-key="1" class="ds-thread"></div></div></div></div><div class="pure-u-1-4 hidden_mid_and_down"><div id="sidebar"><div class="widget"><form action="//www.baidu.com/baidu" method="get" accept-charset="utf-8" target="_blank" class="search-form"><input type="search" name="word" maxlength="20" placeholder="Search"/><input type="hidden" name="si" value="https://kanmars.github.io"/><input name="tn" type="hidden" value="bds"/><input name="cl" type="hidden" value="3"/><input name="ct" type="hidden" value="2097152"/><input name="s" type="hidden" value="on"/></form></div><div class="widget"><div class="widget-title"><i class="fa fa-folder-o"> Kategorien</i></div></div><div class="widget"><div class="widget-title"><i class="fa fa-star-o"> Tags</i></div><div class="tagcloud"><a href="/tags/jetty/" style="font-size: 15px;">jetty</a> <a href="/tags/it/" style="font-size: 15px;">it</a> <a href="/tags/architecture/" style="font-size: 15px;">architecture</a> <a href="/tags/itlife/" style="font-size: 15px;">itlife</a> <a href="/tags/rsa/" style="font-size: 15px;">rsa</a> <a href="/tags/tb/" style="font-size: 15px;">tb</a> <a href="/tags/drawline/" style="font-size: 15px;">drawline</a> <a href="/tags/life/" style="font-size: 15px;">life</a> <a href="/tags/strategy/" style="font-size: 15px;">strategy</a> <a href="/tags/tblife/" style="font-size: 15px;">tblife</a> <a href="/tags/java/" style="font-size: 15px;">java</a> <a href="/tags/linux/" style="font-size: 15px;">linux</a> <a href="/tags/spring/" style="font-size: 15px;">spring</a> <a href="/tags/server/" style="font-size: 15px;">server</a> <a href="/tags/c/" style="font-size: 15px;">c</a> <a href="/tags/c/" style="font-size: 15px;">c++</a> <a href="/tags/lua/" style="font-size: 15px;">lua</a> <a href="/tags/android/" style="font-size: 15px;">android</a> <a href="/tags/javascript/" style="font-size: 15px;">javascript</a> <a href="/tags/neuralnetwork/" style="font-size: 15px;">neuralnetwork</a> <a href="/tags/cpu/" style="font-size: 15px;">cpu</a> <a href="/tags/disk/" style="font-size: 15px;">disk</a> <a href="/tags/fidsk/" style="font-size: 15px;">fidsk</a> <a href="/tags/fstab/" style="font-size: 15px;">fstab</a> <a href="/tags/lvm/" style="font-size: 15px;">lvm</a> <a href="/tags/aix/" style="font-size: 15px;">aix</a></div></div><div class="widget"><div class="widget-title"><i class="fa fa-file-o"> Letzte</i></div><ul class="post-list"><li class="post-list-item"><a class="post-list-link" href="/2016/11/18/2016-11-18-springmvc_source_004_viewresolver/">[KANMARS原创]-SpringMVC源码解析(4) - 视图处理器</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/18/2016-11-18-springmvc_source_003_requestprocess/">[KANMARS原创]-SpringMVC源码解析(3) - 请求处理过程</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/17/2016-11-17-springmvc_source_002_start/">[KANMARS原创]-SpringMVC源码解析(2) - 启动过程</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/17/2016-11-17-springmvc_source_001_introduce/">[KANMARS原创]-SpringMVC源码解析(1) - 简介</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/04/2016-11-04-SomeThingAndNothing/">SomeThingAndNothing</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/25/2016-10-25-news-LongRoad/">news It's a Long Road</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/19/2016-10-19-Scale-Services/">On Designing and Deploying Internet-Scale Services</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/18/2016-10-18-dubbo_source_006_summarize/">[KANMARS原创]-DUBBO源码解析(6)-summarize</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/18/2016-10-18-dubbo_source_005_consumerCall/">[KANMARS原创]-DUBBO源码解析(5)-consumerCall</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/09/19/2016-09-08-dubbo_source_004_referenceBean/">[KANMARS原创]-DUBBO源码解析(4)-referenceBean</a></li></ul></div><div class="widget"><div class="comments-title"><i class="fa fa-comment-o"> Letzte Kommentare</i></div><div data-num-items="5" data-show-avatars="0" data-show-time="1" data-show-admin="0" data-excerpt-length="32" data-show-title="1" class="ds-recent-comments"></div></div><div class="widget"><div class="widget-title"><i class="fa fa-external-link"> Blogroll</i></div><ul></ul><a href="http://www.linux.cn" title="Linux-CN" target="_blank">Linux-CN</a><ul></ul><a href="http://www.gome.com.cn" title="国美互联网" target="_blank">国美互联网</a><ul></ul><a href="http://jr.gome.com.cn" title="国美金融" target="_blank">国美金融</a></div></div></div><div class="pure-u-1 pure-u-md-3-4"><div id="footer">© <a href="/." rel="nofollow">KANMARS的博客.</a> Powered by<a rel="nofollow" target="_blank" href="https://hexo.io"> Hexo.</a><a rel="nofollow" target="_blank" href="https://github.com/tufu9441/maupassant-hexo"> Theme</a> by<a rel="nofollow" target="_blank" href="https://github.com/pagecho"> Cho.</a></div></div></div><a id="rocket" href="#top" class="show"></a><script type="text/javascript" src="/js/totop.js?v=0.0.0" async></script><script type="text/javascript" src="//cdn.bootcss.com/fancybox/2.1.5/jquery.fancybox.pack.js" async></script><script type="text/javascript" src="/js/fancybox.js?v=0.0.0" async></script><link rel="stylesheet" type="text/css" href="/css/jquery.fancybox.css?v=0.0.0"><script>var duoshuoQuery = {short_name:'kanmars'};
+(function() {
+    var ds = document.createElement('script');
+    ds.type = 'text/javascript';ds.async = true;
+    ds.src = (document.location.protocol == 'https:' ? 'https:' : 'http:') + '//static.duoshuo.com/embed.js';
+    ds.charset = 'UTF-8';
+    (document.getElementsByTagName('head')[0]
+        || document.getElementsByTagName('body')[0]).appendChild(ds);
+})();
+</script><script type="text/javascript" src="/js/codeblock-resizer.js?v=0.0.0"></script><script type="text/javascript" src="/js/smartresize.js?v=0.0.0"></script></div></body></html>

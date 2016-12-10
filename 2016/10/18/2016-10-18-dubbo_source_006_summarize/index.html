@@ -1,0 +1,74 @@
+<!DOCTYPE html><html lang="null"><head><meta http-equiv="content-type" content="text/html; charset=utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" name="viewport"><meta content="yes" name="apple-mobile-web-app-capable"><meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"><meta content="telephone=no" name="format-detection"><meta name="description"><title>[KANMARS原创]-DUBBO源码解析(6)-summarize | KANMARS的博客</title><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/normalize/5.0.0/normalize.min.css"><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/pure/0.6.0/pure-min.css"><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/pure/0.6.0/grids-responsive-min.css"><link rel="stylesheet" type="text/css" href="/css/style.css?v=0.0.0"><link rel="stylesheet" href="//cdn.bootcss.com/font-awesome/4.7.0/css/font-awesome.min.css"><script type="text/javascript" src="//cdn.bootcss.com/jquery/3.1.1/jquery.min.js"></script><link rel="Shortcut Icon" type="image/x-icon" href="/favicon.ico"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="apple-touch-icon-precomposed" href="/apple-touch-icon.png"></head><body><div class="body_container"><div id="header"><div class="site-name"><h1 class="hidden">[KANMARS原创]-DUBBO源码解析(6)-summarize</h1><a id="logo" href="/.">KANMARS的博客</a><p class="description">helloword 2046。趁着，我会喜怒你会哀乐，唱几分钟情歌。</p></div><div id="nav-menu"><a href="/." class="current"><i class="fa fa-home"> Start</i></a><a href="/archives/"><i class="fa fa-archive"> Archiv</i></a><a href="/2016/04/23/2016-04-23-mysongs/"><i class="fa fa-user"> Über</i></a></div></div><div id="layout" class="pure-g"><div class="pure-u-1 pure-u-md-3-4"><div class="content_container"><div class="post"><h1 class="post-title">[KANMARS原创]-DUBBO源码解析(6)-summarize</h1><div class="post-meta">Oct 18, 2016</div><a data-thread-key="2016/10/18/2016-10-18-dubbo_source_006_summarize/" href="/2016/10/18/2016-10-18-dubbo_source_006_summarize/#comments" class="ds-thread-count"></a><div class="post-content"><p>DUBBO源码解析(6)-summarize</p>
+<h1 id="一、总结"><a href="#一、总结" class="headerlink" title="一、总结"></a>一、总结</h1><p>为期六期的Dubbo源码解析，这是最后一期《总结》</p>
+<p>1、性能：我一直觉得讨论性能，是程序员界的俗人才做的事情。</p>
+<pre><code>A程序调用100万次130秒，B程序调用100万次68秒，因此说B程序的性能高。---这是新时代的盲人摸象
+</code></pre><p>实际上，程序性能影响因素至少包括了CPU、磁盘IO、带宽、网络碰撞、通讯质量等等诸多因素。我大可夸夸其谈的说：根据数据统计A的CPU使用率较低，而B的CPU使用率较高，A的磁盘IO少，而B的磁盘IO多，因此说明A的代码逻辑合理性有待改善，还有优化空间；而B在网络带宽表现不佳，因此如果我们能把50M的网速升级到100M则会提升较大的稳定性，而随着服务器的增多，网络碰撞也是我们需要考虑的，我们需要按照网段和应用进行隔离，保证每个网段之间的冲突减少到最小……</p>
+<p>此等夸夸其谈我能谈几夜不休，但是实际操作的时候，我还是得看实际效果的。</p>
+<p>有人和我评价是Dubbo的性能较差，我觉得吧，够用就好。在同等代码质量的前提下，代码越多性能越差，可以这么认为：</p>
+<p>在相同的代码质量下，性能是和代码数量成正比的。比谁的性能好不过是在比谁的代码更少而已。</p>
+<p>前段时间我写了个KB的RPC调用，绝对的原生态，绝对的高性能，但是我坚决不会用它……</p>
+<p>2、实用性：我觉得Dubbo的实用性还是比较优秀的，Dubbo是服务治理的代表，从其作者梁飞的博文<a href="http://javatar.iteye.com/blog/1345073《服务治理过程演进》" target="_blank" rel="external">http://javatar.iteye.com/blog/1345073《服务治理过程演进》</a></p>
+<pre><code>1. 服务注册与发现 
+2. 软负载均衡与容错 
+3. 服务监控与统计 
+4. 服务容量评估 
+5. 服务上线审批 --&gt;DUBBO并未实现，但是无影响
+6. 服务下线通知 --&gt;DUBBO并未实现，但是无影响 
+7. 服务负责人   --&gt;DUBBO已实现，但是实用性堪忧
+8. 服务文档    --&gt;DUBBO并未实现，但是无影响 
+9. 服务路由     --&gt;DUBBO已实现，但是使用较少
+10. 服务编排    
+11. 服务黑白名单 
+12. 服务权限控制 --&gt;DUBBO并未实现，但是无影响
+13. 服务依赖关系 --&gt;DUBBO并未实现，但是无影响
+14. 服务分层架构 
+15. 服务调用链跟踪 --&gt;DUBBO并未实现，但是无影响--&gt;需要第三方插件实现
+16. 故障传导分析   --&gt;DUBBO并未实现，但是无影响
+17. 服务降级         --&gt;DUBBO并未实现，但是无影响
+18. 服务等级协定   --&gt;DUBBO并未实现，但是无影响
+19. 服务自动测试   
+20. 服务伪装容错     -&gt;DUBBO并未实现，但是无影响
+21. 服务兼容性检测     -&gt;DUBBO并未实现，但是无影响
+22. 服务使用情况报告 
+23. 服务权重动态调整 
+24. 服务负载均衡调整 
+25. 服务映射 
+26. 服务模板工程 
+27. 服务开发IDE     -&gt;DUBBO并未实现，但是无影响
+28. 服务健康检测 -&gt;DUBBO并未实现，但是无影响
+29. 服务容器     -&gt;需要第三方方案
+30. 服务自动部署 -&gt;需要第三方方案
+31. 服务资源调度 -&gt;需要第三方方案
+</code></pre><p>可以总结，Dubbo最重要的是实现了如下功能：</p>
+<pre><code>1、服务注册与发现
+2、软负载均衡与容错
+3、服务监控与统计 
+4、服务容量评估
+5、服务编排
+6、服务黑白名单
+7、服务权重动态调整
+8、服务负载均衡调整
+</code></pre><p>这些功能已经足够解决大型公司的各组织机构的项目耦合、人员效率、系统稳定性，系统扩展性和伸缩性等问题。</p>
+<p>3、Dubbo框架设计：</p>
+<p>3.1 紧凑</p>
+<p>在Dubbo框架设计中，全局围绕着URL,Protocol,Exportor,Invoker等概念进行。</p>
+<p>一切资源都是URL，根据URL可以选择不同的协议如:ZookeeperRegistry、RegistryProtocol,DubboProtocol，进而生成DubboExporter或者DubboInvoker，进而调用底层的HeaderExchange进行数据发送与接受，底层通过异步通讯框架进行通讯</p>
+<p>整个框架显得很紧凑，作者费了很多心血在各个对象之间的交互上面。</p>
+<p>3.2 面对对象</p>
+<p>但局部的风格我认为写的太复杂，不是给人类看的……</p>
+<p>我一直不喜欢面对对象式开发，一是因为我认为面对对象用在Java中是浪费，二是面对对象的领域太多人写个god就开始.do</p>
+<p>举例：dubbo中的invoke.invoke，单看代码是看不懂的，只有在实际运行中，联系上下文才能知道这究竟是一个AbstractCLusterInvoker.invoke以获取zookeeper中的数据，还是一个DubboInvoker.invoke以进行服务器调用，甚至同一个FailoverClusterInvoker.invoke，你都需要根据param,getUrl().getProtocol()等一系列操作才能看懂究竟调用的是哪个函数。</p>
+<p>此外我还有比较不赞同的一点，Dubbo中有一些代理类，例如ProtocolAdaptive等Adaptive类，这些类属于拿着源码也看不懂的类型，你必须得用Dump工具，在进程中把这些动态类的字节码dump下来，反编译完成后才能看懂究竟这些类是什么含义</p>
+<p>Dubbo硬生生的把java写成了javascript这样的动态语言–&gt;只有在运行时根据对象才能知道调用的方法是什么。</p>
+<p>3.3 工具</p>
+<p>dubboAdmin我挺喜欢的，如果有短信报警或者邮件报警就更好了。从工具的角度看，Dubbo已经成为了一个“生态化”的产品，大量的公司在使用原生或者衍生的Dubbo，一系列的服务治理工具，监控工具，流量控制等插件也越来越多，能用到的地方是比较多的。</p>
+</div><script type="text/javascript" src="/js/share.js?v=0.0.0" async></script><a data-url="https://kanmars.github.io/2016/10/18/2016-10-18-dubbo_source_006_summarize/" data-id="ciwjetzgf002l48vq4u05e9wp" class="article-share-link">Aktie</a><div class="tags"><a href="/tags/server/">server</a><a href="/tags/java/">java</a></div><div class="post-nav"><a href="/2016/10/19/2016-10-19-Scale-Services/" class="pre">On Designing and Deploying Internet-Scale Services</a><a href="/2016/10/18/2016-10-18-dubbo_source_005_consumerCall/" class="next">[KANMARS原创]-DUBBO源码解析(5)-consumerCall</a></div><div data-thread-key="2016/10/18/2016-10-18-dubbo_source_006_summarize/" data-title="[KANMARS原创]-DUBBO源码解析(6)-summarize" data-url="https://kanmars.github.io/2016/10/18/2016-10-18-dubbo_source_006_summarize/" class="ds-share flat"><div class="ds-share-inline"><ul class="ds-share-icons-16"><li data-toggle="ds-share-icons-more"><a href="javascript:void(0);" class="ds-more">分享到：</a></li><li><a href="javascript:void(0);" data-service="weibo" class="ds-weibo">微博</a></li><li><a href="javascript:void(0);" data-service="qzone" class="ds-qzone">QQ空间</a></li><li><a href="javascript:void(0);" data-service="qqt" class="ds-qqt">腾讯微博</a></li><li><a href="javascript:void(0);" data-service="wechat" class="ds-wechat">微信</a></li></ul><div class="ds-share-icons-more"></div></div></div><div data-thread-key="2016/10/18/2016-10-18-dubbo_source_006_summarize/" data-title="[KANMARS原创]-DUBBO源码解析(6)-summarize" data-url="https://kanmars.github.io/2016/10/18/2016-10-18-dubbo_source_006_summarize/" data-author-key="1" class="ds-thread"></div></div></div></div><div class="pure-u-1-4 hidden_mid_and_down"><div id="sidebar"><div class="widget"><form action="//www.baidu.com/baidu" method="get" accept-charset="utf-8" target="_blank" class="search-form"><input type="search" name="word" maxlength="20" placeholder="Search"/><input type="hidden" name="si" value="https://kanmars.github.io"/><input name="tn" type="hidden" value="bds"/><input name="cl" type="hidden" value="3"/><input name="ct" type="hidden" value="2097152"/><input name="s" type="hidden" value="on"/></form></div><div class="widget"><div class="widget-title"><i class="fa fa-folder-o"> Kategorien</i></div></div><div class="widget"><div class="widget-title"><i class="fa fa-star-o"> Tags</i></div><div class="tagcloud"><a href="/tags/jetty/" style="font-size: 15px;">jetty</a> <a href="/tags/it/" style="font-size: 15px;">it</a> <a href="/tags/architecture/" style="font-size: 15px;">architecture</a> <a href="/tags/itlife/" style="font-size: 15px;">itlife</a> <a href="/tags/rsa/" style="font-size: 15px;">rsa</a> <a href="/tags/tb/" style="font-size: 15px;">tb</a> <a href="/tags/drawline/" style="font-size: 15px;">drawline</a> <a href="/tags/life/" style="font-size: 15px;">life</a> <a href="/tags/strategy/" style="font-size: 15px;">strategy</a> <a href="/tags/tblife/" style="font-size: 15px;">tblife</a> <a href="/tags/java/" style="font-size: 15px;">java</a> <a href="/tags/linux/" style="font-size: 15px;">linux</a> <a href="/tags/spring/" style="font-size: 15px;">spring</a> <a href="/tags/server/" style="font-size: 15px;">server</a> <a href="/tags/c/" style="font-size: 15px;">c</a> <a href="/tags/c/" style="font-size: 15px;">c++</a> <a href="/tags/lua/" style="font-size: 15px;">lua</a> <a href="/tags/android/" style="font-size: 15px;">android</a> <a href="/tags/javascript/" style="font-size: 15px;">javascript</a> <a href="/tags/neuralnetwork/" style="font-size: 15px;">neuralnetwork</a> <a href="/tags/cpu/" style="font-size: 15px;">cpu</a> <a href="/tags/disk/" style="font-size: 15px;">disk</a> <a href="/tags/fidsk/" style="font-size: 15px;">fidsk</a> <a href="/tags/fstab/" style="font-size: 15px;">fstab</a> <a href="/tags/lvm/" style="font-size: 15px;">lvm</a> <a href="/tags/aix/" style="font-size: 15px;">aix</a></div></div><div class="widget"><div class="widget-title"><i class="fa fa-file-o"> Letzte</i></div><ul class="post-list"><li class="post-list-item"><a class="post-list-link" href="/2016/11/18/2016-11-18-springmvc_source_004_viewresolver/">[KANMARS原创]-SpringMVC源码解析(4) - 视图处理器</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/18/2016-11-18-springmvc_source_003_requestprocess/">[KANMARS原创]-SpringMVC源码解析(3) - 请求处理过程</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/17/2016-11-17-springmvc_source_002_start/">[KANMARS原创]-SpringMVC源码解析(2) - 启动过程</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/17/2016-11-17-springmvc_source_001_introduce/">[KANMARS原创]-SpringMVC源码解析(1) - 简介</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/04/2016-11-04-SomeThingAndNothing/">SomeThingAndNothing</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/25/2016-10-25-news-LongRoad/">news It's a Long Road</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/19/2016-10-19-Scale-Services/">On Designing and Deploying Internet-Scale Services</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/18/2016-10-18-dubbo_source_006_summarize/">[KANMARS原创]-DUBBO源码解析(6)-summarize</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/18/2016-10-18-dubbo_source_005_consumerCall/">[KANMARS原创]-DUBBO源码解析(5)-consumerCall</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/09/19/2016-09-08-dubbo_source_004_referenceBean/">[KANMARS原创]-DUBBO源码解析(4)-referenceBean</a></li></ul></div><div class="widget"><div class="comments-title"><i class="fa fa-comment-o"> Letzte Kommentare</i></div><div data-num-items="5" data-show-avatars="0" data-show-time="1" data-show-admin="0" data-excerpt-length="32" data-show-title="1" class="ds-recent-comments"></div></div><div class="widget"><div class="widget-title"><i class="fa fa-external-link"> Blogroll</i></div><ul></ul><a href="http://www.linux.cn" title="Linux-CN" target="_blank">Linux-CN</a><ul></ul><a href="http://www.gome.com.cn" title="国美互联网" target="_blank">国美互联网</a><ul></ul><a href="http://jr.gome.com.cn" title="国美金融" target="_blank">国美金融</a></div></div></div><div class="pure-u-1 pure-u-md-3-4"><div id="footer">© <a href="/." rel="nofollow">KANMARS的博客.</a> Powered by<a rel="nofollow" target="_blank" href="https://hexo.io"> Hexo.</a><a rel="nofollow" target="_blank" href="https://github.com/tufu9441/maupassant-hexo"> Theme</a> by<a rel="nofollow" target="_blank" href="https://github.com/pagecho"> Cho.</a></div></div></div><a id="rocket" href="#top" class="show"></a><script type="text/javascript" src="/js/totop.js?v=0.0.0" async></script><script type="text/javascript" src="//cdn.bootcss.com/fancybox/2.1.5/jquery.fancybox.pack.js" async></script><script type="text/javascript" src="/js/fancybox.js?v=0.0.0" async></script><link rel="stylesheet" type="text/css" href="/css/jquery.fancybox.css?v=0.0.0"><script>var duoshuoQuery = {short_name:'kanmars'};
+(function() {
+    var ds = document.createElement('script');
+    ds.type = 'text/javascript';ds.async = true;
+    ds.src = (document.location.protocol == 'https:' ? 'https:' : 'http:') + '//static.duoshuo.com/embed.js';
+    ds.charset = 'UTF-8';
+    (document.getElementsByTagName('head')[0]
+        || document.getElementsByTagName('body')[0]).appendChild(ds);
+})();
+</script><script type="text/javascript" src="/js/codeblock-resizer.js?v=0.0.0"></script><script type="text/javascript" src="/js/smartresize.js?v=0.0.0"></script></div></body></html>

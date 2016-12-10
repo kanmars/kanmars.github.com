@@ -1,0 +1,365 @@
+<!DOCTYPE html><html lang="null"><head><meta http-equiv="content-type" content="text/html; charset=utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" name="viewport"><meta content="yes" name="apple-mobile-web-app-capable"><meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"><meta content="telephone=no" name="format-detection"><meta name="description"><title>[KANMARS原创]-DUBBO源码解析(5)-consumerCall | KANMARS的博客</title><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/normalize/5.0.0/normalize.min.css"><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/pure/0.6.0/pure-min.css"><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/pure/0.6.0/grids-responsive-min.css"><link rel="stylesheet" type="text/css" href="/css/style.css?v=0.0.0"><link rel="stylesheet" href="//cdn.bootcss.com/font-awesome/4.7.0/css/font-awesome.min.css"><script type="text/javascript" src="//cdn.bootcss.com/jquery/3.1.1/jquery.min.js"></script><link rel="Shortcut Icon" type="image/x-icon" href="/favicon.ico"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="apple-touch-icon-precomposed" href="/apple-touch-icon.png"></head><body><div class="body_container"><div id="header"><div class="site-name"><h1 class="hidden">[KANMARS原创]-DUBBO源码解析(5)-consumerCall</h1><a id="logo" href="/.">KANMARS的博客</a><p class="description">helloword 2046。趁着，我会喜怒你会哀乐，唱几分钟情歌。</p></div><div id="nav-menu"><a href="/." class="current"><i class="fa fa-home"> Start</i></a><a href="/archives/"><i class="fa fa-archive"> Archiv</i></a><a href="/2016/04/23/2016-04-23-mysongs/"><i class="fa fa-user"> Über</i></a></div></div><div id="layout" class="pure-g"><div class="pure-u-1 pure-u-md-3-4"><div class="content_container"><div class="post"><h1 class="post-title">[KANMARS原创]-DUBBO源码解析(5)-consumerCall</h1><div class="post-meta">Oct 18, 2016</div><a data-thread-key="2016/10/18/2016-10-18-dubbo_source_005_consumerCall/" href="/2016/10/18/2016-10-18-dubbo_source_005_consumerCall/#comments" class="ds-thread-count"></a><div class="post-content"><p>DUBBO源码解析(5)-consumerCall客户端调用过程</p>
+<h1 id="一、Dubbo客户端调用过程概述"><a href="#一、Dubbo客户端调用过程概述" class="headerlink" title="一、Dubbo客户端调用过程概述"></a>一、Dubbo客户端调用过程概述</h1><p>dubbo调用过程如下（集群模式的zookeeper,）：</p>
+<p>1、通过依赖注入，注入一个ProxyBean</p>
+<p>2、客户端调用ProxyBean的某方法</p>
+<p>3、客户端调用已实例化到ProxyBean中的invoker(此处为AvailableCluster.join(new StaticDirectory(registryUrlsInvokers))生成的AbstractClusterInvoker)</p>
+<p>4、调用步骤3中的AbstractClusterInvoker的invoke(final Invocation invocation) 方法</p>
+<p>5、在步骤3中的AbstractClusterInvoker的doInvoke方法中，选择一个可用的注册中心地址，然后执行invoker.invoke(invocation);<br>此处的invoker对象为directory.list(invocation)，即步骤3的new StaticDirectory(registryUrlsInvokers)的list(invocation)返回的invokers对象，参见代码：</p>
+<pre><code>public class StaticDirectory&lt;T&gt; extends AbstractDirectory&lt;T&gt; {
+    ... ...
+    @Override
+    protected List&lt;Invoker&lt;T&gt;&gt; doList(Invocation invocation) throws RpcException {
+        return invokers;
+    }
+｝
+</code></pre><p>因此此处执行的是随机从步骤3传入的注册中心的地址所代表的invoker列表中选择一个，然后调用invoker.invoke(invocation);</p>
+<p>6、因为ExtensionLoader的自动封装机制，因此此处的invoker的封装关系为：MockClusterInvoker-&gt;FailoverClusterInvoker</p>
+<p>7、调用FailoverClusterInvoker-&gt;AbstractClusterInvoker的invoke方法</p>
+<p>8、根据FailoverClusterInvoker-&gt;AbstractClusterInvoker-&gt;list(invocation)获取可用的invoke(此处为具体的服务提供者)；而list(invocation)内部是调用了RegistryDirectory.list()-&gt;RegistryDirectory.list()，其代码如下。</p>
+<pre><code>public List&lt;Invoker&lt;T&gt;&gt; doList(Invocation invocation) {
+    if (forbidden) {
+        throw new RpcException(RpcException.FORBIDDEN_EXCEPTION, &quot;Forbid consumer &quot; +  NetUtils.getLocalHost() + &quot; access service &quot; + getInterface().getName() + &quot; from registry &quot; + getUrl().getAddress() + &quot; use dubbo version &quot; + Version.getVersion() + &quot;, Please check registry access list (whitelist/blacklist).&quot;);
+    }
+    List&lt;Invoker&lt;T&gt;&gt; invokers = null;
+    Map&lt;String, List&lt;Invoker&lt;T&gt;&gt;&gt; localMethodInvokerMap = this.methodInvokerMap; //此处为重点
+    if (localMethodInvokerMap != null &amp;&amp; localMethodInvokerMap.size() &gt; 0) {
+        String methodName = RpcUtils.getMethodName(invocation);
+        Object[] args = RpcUtils.getArguments(invocation);
+        if(args != null &amp;&amp; args.length &gt; 0 &amp;&amp; args[0] != null
+                &amp;&amp; (args[0] instanceof String || args[0].getClass().isEnum())) {
+            invokers = localMethodInvokerMap.get(methodName + &quot;.&quot; + args[0]); 
+        }
+        if(invokers == null) {
+            invokers = localMethodInvokerMap.get(methodName);//此处为重点，一般在此分支获取到真正的invokers
+        }
+        if(invokers == null) {
+            invokers = localMethodInvokerMap.get(Constants.ANY_VALUE);
+        }
+        if(invokers == null) {
+            Iterator&lt;List&lt;Invoker&lt;T&gt;&gt;&gt; iterator = localMethodInvokerMap.values().iterator();
+            if (iterator.hasNext()) {
+                invokers = iterator.next();
+            }
+        }
+    }
+    return invokers == null ? new ArrayList&lt;Invoker&lt;T&gt;&gt;(0) : invokers;
+}
+</code></pre><p>而RegistryDirectory是从哪儿来的？位于referenceBean的初始化过程中，在</p>
+<pre><code>referenceConfig.createProxy
+invokers.add(refprotocol.refer(interfaceClass, url));
+RegistryProtocol.refer(Class&lt;T&gt; type, URL url)
+RegistryProtocol.doRefer(cluster, registry, type, url);
+RegistryDirectory&lt;T&gt; directory = new RegistryDirectory&lt;T&gt;(type, url);    //--此处实例化
+directory.subscribe(subscribeUrl.addParameter(Constants.CATEGORY_KEY,     //--此处创建监听
+            Constants.PROVIDERS_CATEGORY 
+            + &quot;,&quot; + Constants.CONFIGURATORS_CATEGORY 
+            + &quot;,&quot; + Constants.ROUTERS_CATEGORY));
+return cluster.join(directory);        //此处cluster为Cluster$Adaptive，使用的是FailoverCluster
+则join生成的FailoverClusterInvoker
+</code></pre><p>再细看一下FailoverClusterInvoker的doList方法，使用的localMethodInvokerMap是从哪儿来的，invokers是从什么地方写进去的？</p>
+<p>可以从RegistryDirectory.subscribe看</p>
+<pre><code>public void subscribe(URL url) {
+    setConsumerUrl(url);
+    registry.subscribe(url, this);//注意此处的this，是一个listener接口的实现，含有notify方法
+}
+</code></pre><p>可以看到调用的是registry.subscribe(url,this)，此处的registry是RegistryProtocol.doRefer(cluster, registry, type, url);的第二个参数，来自<br>    RegistryProtocol.refer(Class<t> type, URL url)<br>    Registry registry = registryFactory.getRegistry(url);    -&gt;获取到zookeeperRegistry</t></p>
+<p>调用zookeeperRegistry.subscribe，调用FailbackRegistry.subscribe，调用zookeeperRegistry.doSubscribe，经过一番复杂的调用，在zookeeperRegistry-&gt;FailbackRegistry-&gt;AbstractRegistry.notify(URL url, NotifyListener listener, List<url> urls)中调用了</url></p>
+<p>listener.notify(categoryList);函数    此处的listener即为RegistryDirectory.subscribe传入的this，也即RegistryDirectory</p>
+<p>那么我们看一下，在zookeeper的信息发生变化的时候,是如何更新，更新到什么位置的？</p>
+<p>详见RegistryDirectory.notify，为帮助大家理解，我删除了一些不重要的代码</p>
+<pre><code>public synchronized void notify(List&lt;URL&gt; urls) {
+    List&lt;URL&gt; invokerUrls = new ArrayList&lt;URL&gt;();
+    for (URL url : urls) {
+        String protocol = url.getProtocol();
+        String category = url.getParameter(Constants.CATEGORY_KEY, Constants.DEFAULT_CATEGORY);
+        if (Constants.PROVIDERS_CATEGORY.equals(category)) {//如果是provider的话
+            invokerUrls.add(url);
+        }
+    }
+    // providers
+    refreshInvoker(invokerUrls);//刷新从zookeeper中获取的invokerUrls参数
+}
+
+private void refreshInvoker(List&lt;URL&gt; invokerUrls){
+    ... ... 
+    Map&lt;String, Invoker&lt;T&gt;&gt; newUrlInvokerMap = toInvokers(invokerUrls) ;//将url转换为Invoker
+    Map&lt;String, List&lt;Invoker&lt;T&gt;&gt;&gt; newMethodInvokerMap = toMethodInvokers(newUrlInvokerMap); // 换方法名映射Invoker列表
+    ... ...
+    this.methodInvokerMap = 
+        multiGroup ? toMergeMethodInvokerMap(newMethodInvokerMap) : newMethodInvokerMap;
+    ... ...
+}
+
+
+private Map&lt;String, Invoker&lt;T&gt;&gt; toInvokers(List&lt;URL&gt; urls) {
+    Map&lt;String, Invoker&lt;T&gt;&gt; newUrlInvokerMap = new HashMap&lt;String, Invoker&lt;T&gt;&gt;();
+
+    Set&lt;String&gt; keys = new HashSet&lt;String&gt;();
+    String queryProtocols = this.queryMap.get(Constants.PROTOCOL_KEY);
+    for (URL providerUrl : urls) {
+        ... ... 
+        URL url = mergeUrl(providerUrl);
+
+        // 缓存key为没有合并消费端参数的URL，不管消费端如何合并参数，如果服务端URL发生变化，则重新refer
+        Map&lt;String, Invoker&lt;T&gt;&gt; localUrlInvokerMap = this.urlInvokerMap; // local reference
+        Invoker&lt;T&gt; invoker = localUrlInvokerMap == null ? null : localUrlInvokerMap.get(key);
+        if (invoker == null) { // 缓存中没有，重新refer
+            try {
+                if (enabled) {
+                    invoker = new InvokerDelegete&lt;T&gt;(protocol.refer(serviceType, url), url, providerUrl);
+                }
+            } catch (Throwable t) {
+                logger.error(&quot;Failed to refer invoker for interface:&quot;+serviceType+&quot;,url:(&quot;+url+&quot;)&quot; + t.getMessage(), t);
+            }
+            if (invoker != null) { // 将新的引用放入缓存
+                newUrlInvokerMap.put(key, invoker);
+            }
+        }else {
+            newUrlInvokerMap.put(key, invoker);
+        }
+    }
+    keys.clear();
+    return newUrlInvokerMap;
+}
+</code></pre><p>可以看到methodInvokerMap即为最终获取到的调用URL的来源</p>
+<p>结合本小节的开头，FailoverClusterInvoker.list函数，查询出来的即为从zookeeper集群中获取的真实服务端地址</p>
+<p>9、回到7、调用FailoverClusterInvoker-&gt;AbstractClusterInvoker的invoke方法</p>
+<pre><code>public Result invoke(final Invocation invocation) throws RpcException {
+
+    checkWheatherDestoried();
+
+    LoadBalance loadbalance;
+
+    List&lt;Invoker&lt;T&gt;&gt; invokers = list(invocation);
+    if (invokers != null &amp;&amp; invokers.size() &gt; 0) {
+        loadbalance = ExtensionLoader.getExtensionLoader(LoadBalance.class).getExtension(invokers.get(0).getUrl()
+                .getMethodParameter(invocation.getMethodName(),Constants.LOADBALANCE_KEY, Constants.DEFAULT_LOADBALANCE));
+    } else {
+        loadbalance = ExtensionLoader.getExtensionLoader(LoadBalance.class).getExtension(Constants.DEFAULT_LOADBALANCE);
+    }
+    RpcUtils.attachInvocationIdIfAsync(getUrl(), invocation);
+    return doInvoke(invocation, invokers, loadbalance);
+}
+</code></pre><p>此步骤可以获取到loadbalance对象，默认为random</p>
+<p>10、调用FailoverClusterInvoker.doInvoke方法，为了简单，我删除掉了与主流程无关的代码</p>
+<pre><code>public Result doInvoke(Invocation invocation, final List&lt;Invoker&lt;T&gt;&gt; invokers, LoadBalance loadbalance) throws RpcException {
+    for (int i = 0; i &lt; invokers.size(); i++) {
+        Invoker&lt;T&gt; invoker = select(loadbalance, invocation, invokers, invoked);
+        Result result = invoker.invoke(invocation);
+        return result;
+    }
+}
+
+protected Invoker&lt;T&gt; select(LoadBalance loadbalance, Invocation invocation, List&lt;Invoker&lt;T&gt;&gt; invokers, List&lt;Invoker&lt;T&gt;&gt; selected) throws RpcException {
+    ......
+    Invoker&lt;T&gt; invoker = doselect(loadbalance, invocation, invokers, selected);
+    ......
+    return invoker;
+}
+
+private Invoker&lt;T&gt; doselect(LoadBalance loadbalance, Invocation invocation, List&lt;Invoker&lt;T&gt;&gt; invokers, List&lt;Invoker&lt;T&gt;&gt; selected) throws RpcException {
+    ......
+    Invoker&lt;T&gt; invoker = loadbalance.select(invokers, getUrl(), invocation);//此处的负载均衡算法比较简单，可以自己看
+    ......
+    return invoker;
+} 
+</code></pre><p>11、然后调用Result result = invoker.invoke(invocation);//此处的invoker为最终的某个服务器上的调用，为步骤8的notify-&gt;refreshInvoker-&gt;toInvokers中生成的new InvokerDelegete<t>(protocol.refer(serviceType, url), url, providerUrl);</t></p>
+<p>12、此处的protocol为referenceBean的protocol，常用为DubboProtocol，即此处的Result result = invoker.invoke(invocation);实质上调用的是new InvokerDelegete<t>(DubboProtocol.refer(serviceType, url), url, providerUrl).invoke(invocation)</t></p>
+<p>13、参见DubboProtocol.refer函数</p>
+<pre><code>public &lt;T&gt; Invoker&lt;T&gt; refer(Class&lt;T&gt; serviceType, URL url) throws RpcException {
+    // create rpc invoker.
+    DubboInvoker&lt;T&gt; invoker = new DubboInvoker&lt;T&gt;(serviceType, url, getClients(url), invokers);
+    invokers.add(invoker);
+    return invoker;
+}
+
+private ExchangeClient[] getClients(URL url){
+    //是否共享连接
+    boolean service_share_connect = false;
+    int connections = url.getParameter(Constants.CONNECTIONS_KEY, 0);
+    //如果connections不配置，则共享连接，否则每服务每连接
+    if (connections == 0){
+        service_share_connect = true;
+        connections = 1;
+    }
+
+    ExchangeClient[] clients = new ExchangeClient[connections];
+    for (int i = 0; i &lt; clients.length; i++) {
+        if (service_share_connect){
+            clients[i] = getSharedClient(url);
+        } else {
+            clients[i] = initClient(url);
+        }
+    }
+    return clients;
+}
+</code></pre><p>即实际调用为new InvokerDelegete<t>(new DubboInvoker<t>(serviceType, url, getClients(url), invokers), url, providerUrl).invoke(invocation)<br>在InvokerDelegete的invoke中无实质有用的代码，因此此处实际上调用的是DubboInvoker.invoke-&gt;AbstractInvoker.invoke-&gt;DubboInvoker.doInvoke</t></t></p>
+<pre><code>protected Result doInvoke(final Invocation invocation) throws Throwable {
+    ExchangeClient currentClient = clients[0];
+    boolean isAsync = RpcUtils.isAsync(getUrl(), invocation);//是否异步
+    boolean isOneway = RpcUtils.isOneway(getUrl(), invocation);//是否单向
+    if (isOneway) {
+        boolean isSent = getUrl().getMethodParameter(methodName, Constants.SENT_KEY, false);
+        currentClient.send(inv, isSent);
+        RpcContext.getContext().setFuture(null);
+        return new RpcResult();
+    } else if (isAsync) {//异步调用
+        ResponseFuture future = currentClient.request(inv, timeout) ;
+        RpcContext.getContext().setFuture(new FutureAdapter&lt;Object&gt;(future));
+        return new RpcResult();
+    } else {//同步调用，默认情况
+        RpcContext.getContext().setFuture(null);
+        return (Result) currentClient.request(inv, timeout).get();
+    }
+}
+</code></pre><p>14、调用currentClient即new ExchangeClient()的request方法，此处同步调用和异步调用的底层是相同的</p>
+<pre><code>public ResponseFuture request(Object request, int timeout) throws RemotingException {
+    if (closed) {
+        throw new RemotingException(this.getLocalAddress(), null, &quot;Failed to send request &quot; + request + &quot;, cause: The channel &quot; + this + &quot; is closed!&quot;);
+    }
+    // create request.
+    Request req = new Request();
+    req.setVersion(&quot;2.0.0&quot;);
+    req.setTwoWay(true);
+    req.setData(request);
+    DefaultFuture future = new DefaultFuture(channel, req, timeout);
+    try{
+        channel.send(req);
+    }catch (RemotingException e) {
+        future.cancel();
+        throw e;
+    }
+    return future;
+}
+</code></pre><p>再看DefaultFuture这个类，构造方法如下</p>
+<pre><code>private static final Map&lt;Long, DefaultFuture&gt; FUTURES   = new ConcurrentHashMap&lt;Long, DefaultFuture&gt;();
+
+public DefaultFuture(Channel channel, Request request, int timeout){
+    this.channel = channel;
+    this.request = request;
+    this.id = request.getId();
+    this.timeout = timeout &gt; 0 ? timeout : channel.getUrl().getPositiveParameter(Constants.TIMEOUT_KEY, Constants.DEFAULT_TIMEOUT);
+    // put into waiting map.
+    FUTURES.put(id, this);//此处是重点，根据id，在FUTURES中已ID为key储存了每一个future，用于异步消息返回之后，与请求消息对应
+    CHANNELS.put(id, channel);
+}
+</code></pre><p>此处我们就简单以同步调用为例，同步调用的关键在于get方法</p>
+<pre><code>return (Result) currentClient.request(inv, timeout).get();
+</code></pre><p>调用的是DefaultFuture的get()函数</p>
+<pre><code>public Object get(int timeout) throws RemotingException {
+    if (timeout &lt;= 0) {
+        timeout = Constants.DEFAULT_TIMEOUT;
+    }
+    if (! isDone()) {
+        long start = System.currentTimeMillis();
+        lock.lock();
+        try {
+            while (! isDone()) {
+                done.await(timeout, TimeUnit.MILLISECONDS);
+                if (isDone() || System.currentTimeMillis() - start &gt; timeout) {
+                    break;
+                }
+            }
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        } finally {
+            lock.unlock();
+        }
+        if (! isDone()) {
+            throw new TimeoutException(sent &gt; 0, channel, getTimeoutMessage(false));
+        }
+    }
+    return returnFromResponse();
+}
+</code></pre><p>可见，在调用get的时候会阻塞，直到有数据返回</p>
+<p>15、在发送消息的channel.send(req);函数中，会对req进行解码，解码是由NettyClient创建时的管道流所决定的</p>
+<pre><code>@Override
+protected void doOpen() throws Throwable {
+    NettyHelper.setNettyLoggerFactory();
+    bootstrap = new ClientBootstrap(channelFactory);
+    // config
+    // @see org.jboss.netty.channel.socket.SocketChannelConfig
+    bootstrap.setOption(&quot;keepAlive&quot;, true);
+    bootstrap.setOption(&quot;tcpNoDelay&quot;, true);
+    bootstrap.setOption(&quot;connectTimeoutMillis&quot;, getTimeout());
+    final NettyHandler nettyHandler = new NettyHandler(getUrl(), this);
+    bootstrap.setPipelineFactory(new ChannelPipelineFactory() {
+        public ChannelPipeline getPipeline() {
+            NettyCodecAdapter adapter = new NettyCodecAdapter(getCodec(), getUrl(), NettyClient.this);
+            ChannelPipeline pipeline = Channels.pipeline();
+            pipeline.addLast(&quot;decoder&quot;, adapter.getDecoder());
+            pipeline.addLast(&quot;encoder&quot;, adapter.getEncoder());
+            pipeline.addLast(&quot;handler&quot;, nettyHandler);
+            return pipeline;
+        }
+    });
+}
+</code></pre><p>可以看到，使用的是NettyCodecAdapter的decoder和encoder作为解码、编码器</p>
+<p>在此解码编码器内部即可完成对象的序列化，发送，接受，反序列化等操作</p>
+<p>16、特别注意，由于ExtensionLoader的getExtension()机制中有一个自动封装机制，因此，使用ExtensionLoader加载的对象，会自动封装上其封装对象，例如步骤12获取DubboProtocol，实际获取的是如下内容：</p>
+<pre><code>ProtocolListenerWrapper
+    - ProtocolFilterWrapper
+        - DubboProtocol
+</code></pre><p>而在ProtocolFilterWrapper中，因为有如下代码</p>
+<pre><code>public &lt;T&gt; Invoker&lt;T&gt; refer(Class&lt;T&gt; type, URL url) throws RpcException {
+    if (Constants.REGISTRY_PROTOCOL.equals(url.getProtocol())) {
+        return protocol.refer(type, url);
+    }
+    return buildInvokerChain(protocol.refer(type, url), Constants.REFERENCE_FILTER_KEY, Constants.CONSUMER);
+}
+
+private static &lt;T&gt; Invoker&lt;T&gt; buildInvokerChain(final Invoker&lt;T&gt; invoker, String key, String group) {
+    Invoker&lt;T&gt; last = invoker;
+    //此处为获取Filter中配置的ActivateExtension的拦截器，作为invoker的拦截对象
+    List&lt;Filter&gt; filters = ExtensionLoader.getExtensionLoader(Filter.class).getActivateExtension(invoker.getUrl(), key, group);
+    if (filters.size() &gt; 0) {
+        for (int i = filters.size() - 1; i &gt;= 0; i --) {
+            final Filter filter = filters.get(i);
+            final Invoker&lt;T&gt; next = last;
+            last = new Invoker&lt;T&gt;() {
+
+                public Class&lt;T&gt; getInterface() {
+                    return invoker.getInterface();
+                }
+
+                public URL getUrl() {
+                    return invoker.getUrl();
+                }
+
+                public boolean isAvailable() {
+                    return invoker.isAvailable();
+                }
+
+                public Result invoke(Invocation invocation) throws RpcException {
+                    return filter.invoke(next, invocation);
+                }
+
+                public void destroy() {
+                    invoker.destroy();
+                }
+
+                @Override
+                public String toString() {
+                    return invoker.toString();
+                }
+            };
+        }
+    }
+    return last;
+}
+</code></pre><p>因这个原理，实现了dubboProtocol的拦截器拦截</p>
+<p>本公司比较著名的例子，就是gcat的jar包，Maven: com.dianping.cat:cat-client:1.3.4-SNAPSHOT<br>里面有个/META-INF/dubbo/com.alibaba.dubbo.rpc.Filter文件，内容为</p>
+<pre><code>catDubboFilter=com.gome.track.dubbo.CatDubboFilter
+</code></pre><p>于是在ProtocolFilterWrapper.refer的过程中，因ExtensionLoader.getExtensionLoader(Filter.class).getActivateExtension机制加载了进来，形成了拦截所有的Dubbo调用的效果。</p>
+<p>但是也可以看到，天下的代码一大抄，我们抄的大众点评的，连jar包名字都没改…………</p>
+<h1 id="二、Dubbo服务端调用过程概述"><a href="#二、Dubbo服务端调用过程概述" class="headerlink" title="二、Dubbo服务端调用过程概述"></a>二、Dubbo服务端调用过程概述</h1><p>Dubbo的服务端调用就简单多了，参见本系列的第三章serviceConfig即可。</p>
+</div><script type="text/javascript" src="/js/share.js?v=0.0.0" async></script><a data-url="https://kanmars.github.io/2016/10/18/2016-10-18-dubbo_source_005_consumerCall/" data-id="ciwjetzgf002m48vqln6p0toz" class="article-share-link">Aktie</a><div class="tags"><a href="/tags/server/">server</a><a href="/tags/java/">java</a></div><div class="post-nav"><a href="/2016/10/18/2016-10-18-dubbo_source_006_summarize/" class="pre">[KANMARS原创]-DUBBO源码解析(6)-summarize</a><a href="/2016/09/19/2016-09-08-dubbo_source_004_referenceBean/" class="next">[KANMARS原创]-DUBBO源码解析(4)-referenceBean</a></div><div data-thread-key="2016/10/18/2016-10-18-dubbo_source_005_consumerCall/" data-title="[KANMARS原创]-DUBBO源码解析(5)-consumerCall" data-url="https://kanmars.github.io/2016/10/18/2016-10-18-dubbo_source_005_consumerCall/" class="ds-share flat"><div class="ds-share-inline"><ul class="ds-share-icons-16"><li data-toggle="ds-share-icons-more"><a href="javascript:void(0);" class="ds-more">分享到：</a></li><li><a href="javascript:void(0);" data-service="weibo" class="ds-weibo">微博</a></li><li><a href="javascript:void(0);" data-service="qzone" class="ds-qzone">QQ空间</a></li><li><a href="javascript:void(0);" data-service="qqt" class="ds-qqt">腾讯微博</a></li><li><a href="javascript:void(0);" data-service="wechat" class="ds-wechat">微信</a></li></ul><div class="ds-share-icons-more"></div></div></div><div data-thread-key="2016/10/18/2016-10-18-dubbo_source_005_consumerCall/" data-title="[KANMARS原创]-DUBBO源码解析(5)-consumerCall" data-url="https://kanmars.github.io/2016/10/18/2016-10-18-dubbo_source_005_consumerCall/" data-author-key="1" class="ds-thread"></div></div></div></div><div class="pure-u-1-4 hidden_mid_and_down"><div id="sidebar"><div class="widget"><form action="//www.baidu.com/baidu" method="get" accept-charset="utf-8" target="_blank" class="search-form"><input type="search" name="word" maxlength="20" placeholder="Search"/><input type="hidden" name="si" value="https://kanmars.github.io"/><input name="tn" type="hidden" value="bds"/><input name="cl" type="hidden" value="3"/><input name="ct" type="hidden" value="2097152"/><input name="s" type="hidden" value="on"/></form></div><div class="widget"><div class="widget-title"><i class="fa fa-folder-o"> Kategorien</i></div></div><div class="widget"><div class="widget-title"><i class="fa fa-star-o"> Tags</i></div><div class="tagcloud"><a href="/tags/jetty/" style="font-size: 15px;">jetty</a> <a href="/tags/it/" style="font-size: 15px;">it</a> <a href="/tags/architecture/" style="font-size: 15px;">architecture</a> <a href="/tags/itlife/" style="font-size: 15px;">itlife</a> <a href="/tags/rsa/" style="font-size: 15px;">rsa</a> <a href="/tags/tb/" style="font-size: 15px;">tb</a> <a href="/tags/drawline/" style="font-size: 15px;">drawline</a> <a href="/tags/life/" style="font-size: 15px;">life</a> <a href="/tags/strategy/" style="font-size: 15px;">strategy</a> <a href="/tags/tblife/" style="font-size: 15px;">tblife</a> <a href="/tags/java/" style="font-size: 15px;">java</a> <a href="/tags/linux/" style="font-size: 15px;">linux</a> <a href="/tags/spring/" style="font-size: 15px;">spring</a> <a href="/tags/server/" style="font-size: 15px;">server</a> <a href="/tags/c/" style="font-size: 15px;">c</a> <a href="/tags/c/" style="font-size: 15px;">c++</a> <a href="/tags/lua/" style="font-size: 15px;">lua</a> <a href="/tags/android/" style="font-size: 15px;">android</a> <a href="/tags/javascript/" style="font-size: 15px;">javascript</a> <a href="/tags/neuralnetwork/" style="font-size: 15px;">neuralnetwork</a> <a href="/tags/cpu/" style="font-size: 15px;">cpu</a> <a href="/tags/disk/" style="font-size: 15px;">disk</a> <a href="/tags/fidsk/" style="font-size: 15px;">fidsk</a> <a href="/tags/fstab/" style="font-size: 15px;">fstab</a> <a href="/tags/lvm/" style="font-size: 15px;">lvm</a> <a href="/tags/aix/" style="font-size: 15px;">aix</a></div></div><div class="widget"><div class="widget-title"><i class="fa fa-file-o"> Letzte</i></div><ul class="post-list"><li class="post-list-item"><a class="post-list-link" href="/2016/11/18/2016-11-18-springmvc_source_004_viewresolver/">[KANMARS原创]-SpringMVC源码解析(4) - 视图处理器</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/18/2016-11-18-springmvc_source_003_requestprocess/">[KANMARS原创]-SpringMVC源码解析(3) - 请求处理过程</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/17/2016-11-17-springmvc_source_002_start/">[KANMARS原创]-SpringMVC源码解析(2) - 启动过程</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/17/2016-11-17-springmvc_source_001_introduce/">[KANMARS原创]-SpringMVC源码解析(1) - 简介</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/04/2016-11-04-SomeThingAndNothing/">SomeThingAndNothing</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/25/2016-10-25-news-LongRoad/">news It's a Long Road</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/19/2016-10-19-Scale-Services/">On Designing and Deploying Internet-Scale Services</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/18/2016-10-18-dubbo_source_006_summarize/">[KANMARS原创]-DUBBO源码解析(6)-summarize</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/18/2016-10-18-dubbo_source_005_consumerCall/">[KANMARS原创]-DUBBO源码解析(5)-consumerCall</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/09/19/2016-09-08-dubbo_source_004_referenceBean/">[KANMARS原创]-DUBBO源码解析(4)-referenceBean</a></li></ul></div><div class="widget"><div class="comments-title"><i class="fa fa-comment-o"> Letzte Kommentare</i></div><div data-num-items="5" data-show-avatars="0" data-show-time="1" data-show-admin="0" data-excerpt-length="32" data-show-title="1" class="ds-recent-comments"></div></div><div class="widget"><div class="widget-title"><i class="fa fa-external-link"> Blogroll</i></div><ul></ul><a href="http://www.linux.cn" title="Linux-CN" target="_blank">Linux-CN</a><ul></ul><a href="http://www.gome.com.cn" title="国美互联网" target="_blank">国美互联网</a><ul></ul><a href="http://jr.gome.com.cn" title="国美金融" target="_blank">国美金融</a></div></div></div><div class="pure-u-1 pure-u-md-3-4"><div id="footer">© <a href="/." rel="nofollow">KANMARS的博客.</a> Powered by<a rel="nofollow" target="_blank" href="https://hexo.io"> Hexo.</a><a rel="nofollow" target="_blank" href="https://github.com/tufu9441/maupassant-hexo"> Theme</a> by<a rel="nofollow" target="_blank" href="https://github.com/pagecho"> Cho.</a></div></div></div><a id="rocket" href="#top" class="show"></a><script type="text/javascript" src="/js/totop.js?v=0.0.0" async></script><script type="text/javascript" src="//cdn.bootcss.com/fancybox/2.1.5/jquery.fancybox.pack.js" async></script><script type="text/javascript" src="/js/fancybox.js?v=0.0.0" async></script><link rel="stylesheet" type="text/css" href="/css/jquery.fancybox.css?v=0.0.0"><script>var duoshuoQuery = {short_name:'kanmars'};
+(function() {
+    var ds = document.createElement('script');
+    ds.type = 'text/javascript';ds.async = true;
+    ds.src = (document.location.protocol == 'https:' ? 'https:' : 'http:') + '//static.duoshuo.com/embed.js';
+    ds.charset = 'UTF-8';
+    (document.getElementsByTagName('head')[0]
+        || document.getElementsByTagName('body')[0]).appendChild(ds);
+})();
+</script><script type="text/javascript" src="/js/codeblock-resizer.js?v=0.0.0"></script><script type="text/javascript" src="/js/smartresize.js?v=0.0.0"></script></div></body></html>

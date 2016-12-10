@@ -1,0 +1,65 @@
+<!DOCTYPE html><html lang="null"><head><meta http-equiv="content-type" content="text/html; charset=utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" name="viewport"><meta content="yes" name="apple-mobile-web-app-capable"><meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"><meta content="telephone=no" name="format-detection"><meta name="description"><title>[KANMARS原创] -  贝叶斯公式 | KANMARS的博客</title><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/normalize/5.0.0/normalize.min.css"><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/pure/0.6.0/pure-min.css"><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/pure/0.6.0/grids-responsive-min.css"><link rel="stylesheet" type="text/css" href="/css/style.css?v=0.0.0"><link rel="stylesheet" href="//cdn.bootcss.com/font-awesome/4.7.0/css/font-awesome.min.css"><script type="text/javascript" src="//cdn.bootcss.com/jquery/3.1.1/jquery.min.js"></script><link rel="Shortcut Icon" type="image/x-icon" href="/favicon.ico"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="apple-touch-icon-precomposed" href="/apple-touch-icon.png"></head><body><div class="body_container"><div id="header"><div class="site-name"><h1 class="hidden">[KANMARS原创] -  贝叶斯公式</h1><a id="logo" href="/.">KANMARS的博客</a><p class="description">helloword 2046。趁着，我会喜怒你会哀乐，唱几分钟情歌。</p></div><div id="nav-menu"><a href="/." class="current"><i class="fa fa-home"> Start</i></a><a href="/archives/"><i class="fa fa-archive"> Archiv</i></a><a href="/2016/04/23/2016-04-23-mysongs/"><i class="fa fa-user"> Über</i></a></div></div><div id="layout" class="pure-g"><div class="pure-u-1 pure-u-md-3-4"><div class="content_container"><div class="post"><h1 class="post-title">[KANMARS原创] -  贝叶斯公式</h1><div class="post-meta">Apr 9, 2016</div><a data-thread-key="2016/04/09/2016-04-09-psBayes_001/" href="/2016/04/09/2016-04-09-psBayes_001/#comments" class="ds-thread-count"></a><div class="post-content"><p>贝叶斯公式是一个很朴素的定理，可以参考百度百科：<br><a href="http://baike.baidu.com/link?url=h2V8ZHTHcxk05h7zqO_LIqN05F18CunIaMli3Zlabo6SV10I5E8qp4QODWkutCXEpYzUlM4KsCijmV5pIkmTHq" title="百度百科：贝叶斯公式" target="_blank" rel="external">http://baike.baidu.com/link?url=h2V8ZHTHcxk05h7zqO_LIqN05F18CunIaMli3Zlabo6SV10I5E8qp4QODWkutCXEpYzUlM4KsCijmV5pIkmTHq</a></p>
+<blockquote>
+<p>贝叶斯公式（发表于1763年）为： P(H[i]/A)=P(H[i])<em>P(A│H[i])/{P(H[1])</em>P(A│H[1]) +P(H[2])<em>P(A│H[2])+…+P(H[n])</em>P(A│H[n])}</p>
+<p>一些文献中把P(H[1])、P(H[2])称为基础概率，P(A│H[1])为击中率，P(A│H[2])为误报率[1][2]  。</p>
+</blockquote>
+<p>开始工作才发现，如果你想深入的进入一个领域有三门课是必须的<strong>基础</strong>：微积分，线性代数，概率论</p>
+<p>凡是高深一点的知识都是以微积分为原理进行分析的，例如，对数据的统计、求数据的极值、求最优方案</p>
+<p>凡是专业性略强一点的知识，都是线性代数为基础的，例如，矩阵运算，求矩阵变换，求最佳策略</p>
+<p>凡是涉及重复操作的工作，都是以概率论为基础的，例如，垃圾邮件分类，如何判定一个事物是否靠谱，如何判定是否有风险</p>
+<p>韩寒说数学学到初中就够了，现在看来，是一个初中文化水平的同学的不成熟见解</p>
+<hr>
+<p>我们仅说概率论</p>
+<p>大学时自从概率论课上捡了一次橡皮，后来我就再也听不懂了。贝叶斯公式在问题清单中位列第一。</p>
+<p>直到最近反复看了十来遍……人傻勿扰</p>
+<p>贝叶斯公式需要看它的推断过程：</p>
+<p>1、条件概率公式</p>
+<p><img src="http://www.forkosh.com/mathtex.cgi?\Large P(B|A)=\frac{P(AB)}{P(A)}"></p>
+<p>2、用全概率公式改写</p>
+<p><img src="http://www.forkosh.com/mathtex.cgi?\Large P(AB)=P(B)P(A|B)"></p>
+<p><img src="http://www.forkosh.com/mathtex.cgi?\Large P(A)=\sum_{j=1}^NP(A|B_j)P(B_j)"></p>
+<p>3、得到贝叶斯公式</p>
+<p><img src="http://www.forkosh.com/mathtex.cgi? \Large P(B|A)=\frac{P(B)P(A|B)}{\sum_{j=1}^NP(A|B_j)P(B_j)}"></p>
+<p>公式已经列在这儿了，关键问题在于我们怎么使用它。</p>
+<p>贝叶斯公式的使用方式举例如下：</p>
+<blockquote>
+<p>某地区肝癌的发病率为0.0004，先用甲胎蛋白法进行普查。医学研究表明，化验结果是存在错误的。<br>已知患有肝癌的人其化验结果99%呈阳性（有病），而没有患肝癌的人其化验结果99.9%呈阴性（无病）。<br>现某人的检查结果呈阳性，问他真患肝癌的概率是多少？</p>
+<p><strong>解</strong>  记B事件“被检查者患有肝癌”， A为事件“检查结果为阳性”，由题设知</p>
+<p><img src="http://www.forkosh.com/mathtex.cgi?\Large P(B)=0.0004"><br><img src="http://www.forkosh.com/mathtex.cgi?\Large P(\overline{B})=0.9996"></p>
+<p><img src="http://www.forkosh.com/mathtex.cgi?\Large P(A|B)=0.99"><br><img src="http://www.forkosh.com/mathtex.cgi?\Large P(A|\overline{B})=0.001"></p>
+<p>根据贝叶斯公式</p>
+<p><img src="http://www.forkosh.com/mathtex.cgi?
+\Large P(B|A)=\frac{P(B)P(A|B)}{P(A|B)P(B)+P(A|\overline{B})P(\overline{B})}"></p>
+<p>代入值可得</p>
+<p><img src="http://www.forkosh.com/mathtex.cgi?
+\Large P(B|A)=\frac{0.0004 * 0.99}{0.99 * 0.0004+0.001 * 0.9996}=0.284"></p>
+</blockquote>
+<p>也就是说，如果一个人检查结果呈阳性，那么他患肝癌的概率只有0.284</p>
+<p>这个结果有点不可思议，尽管误诊率仅有1.1%，但是结果的可靠性只有28.4%。</p>
+<blockquote>
+<p>但仔细分析一下就可以理解了。因为肝癌发病率很低，在10000人中越有四人，而约有9996人不患肝癌。</p>
+<p>对10000个人中，用甲胎蛋白法进行检查，按其错检的概率可知，9996个不患肝癌者中约有约有9996X0.001=9.996个呈阳性。</p>
+<p>另外四个真患肝癌者的检查报告中约有4X0.99=3.96个呈阳性，仅从13.956个呈阳性者中看出，真患肝癌的3.96人约占28.4%。</p>
+</blockquote>
+<p>如何提高这个可信度？这才是贝叶斯公式的正式用途：</p>
+<p>在实际中，常采用复查的方法来减少错误率，对首次检查得的人群再进行复查：</p>
+<blockquote>
+<p><img src="http://www.forkosh.com/mathtex.cgi?\Large P(B)=0.284"></p>
+<p><img src="http://www.forkosh.com/mathtex.cgi?
+\Large P(B|A)=\frac{0.284 * 0.99}{0.99 * 0.284+0.716 * 0.9996}=0.997"></p>
+</blockquote>
+<p>这样就可以用新的证据来进一步加强或者减弱信念。</p>
+<p>因此，贝叶斯主义者又称之为信念主义者。根据此主义，会假定一个初始信念P(B)，即先验概率，通过新证据的出现，对概率</p>
+<p>进行修正，得到了后验概率。再将后验概率作为新的先验概率，通过其他的新证据对结论进行休整……</p>
+<p>在迭代过程中，信念会收敛于一个概率范围，即此信念的真实概率范围。</p>
+<p>这是一种朴素的认识世界的方法。</p>
+</div><script type="text/javascript" src="/js/share.js?v=0.0.0" async></script><a data-url="https://kanmars.github.io/2016/04/09/2016-04-09-psBayes_001/" data-id="ciwjetzfz002148vqix0urekh" class="article-share-link">Aktie</a><div class="tags"><a href="/tags/server/">server</a><a href="/tags/java/">java</a></div><div class="post-nav"><a href="/2016/04/23/2016-04-23-mysongs/" class="pre">[KANMARS原创]-非夜深不可听歌</a><a href="/2016/03/14/2016-03-14-KB_GOMERPC_1/" class="next">[KANMARS原创] - KB，国美金融未来的RPC框架（一）</a></div><div data-thread-key="2016/04/09/2016-04-09-psBayes_001/" data-title="[KANMARS原创] -  贝叶斯公式" data-url="https://kanmars.github.io/2016/04/09/2016-04-09-psBayes_001/" class="ds-share flat"><div class="ds-share-inline"><ul class="ds-share-icons-16"><li data-toggle="ds-share-icons-more"><a href="javascript:void(0);" class="ds-more">分享到：</a></li><li><a href="javascript:void(0);" data-service="weibo" class="ds-weibo">微博</a></li><li><a href="javascript:void(0);" data-service="qzone" class="ds-qzone">QQ空间</a></li><li><a href="javascript:void(0);" data-service="qqt" class="ds-qqt">腾讯微博</a></li><li><a href="javascript:void(0);" data-service="wechat" class="ds-wechat">微信</a></li></ul><div class="ds-share-icons-more"></div></div></div><div data-thread-key="2016/04/09/2016-04-09-psBayes_001/" data-title="[KANMARS原创] -  贝叶斯公式" data-url="https://kanmars.github.io/2016/04/09/2016-04-09-psBayes_001/" data-author-key="1" class="ds-thread"></div></div></div></div><div class="pure-u-1-4 hidden_mid_and_down"><div id="sidebar"><div class="widget"><form action="//www.baidu.com/baidu" method="get" accept-charset="utf-8" target="_blank" class="search-form"><input type="search" name="word" maxlength="20" placeholder="Search"/><input type="hidden" name="si" value="https://kanmars.github.io"/><input name="tn" type="hidden" value="bds"/><input name="cl" type="hidden" value="3"/><input name="ct" type="hidden" value="2097152"/><input name="s" type="hidden" value="on"/></form></div><div class="widget"><div class="widget-title"><i class="fa fa-folder-o"> Kategorien</i></div></div><div class="widget"><div class="widget-title"><i class="fa fa-star-o"> Tags</i></div><div class="tagcloud"><a href="/tags/jetty/" style="font-size: 15px;">jetty</a> <a href="/tags/it/" style="font-size: 15px;">it</a> <a href="/tags/architecture/" style="font-size: 15px;">architecture</a> <a href="/tags/itlife/" style="font-size: 15px;">itlife</a> <a href="/tags/rsa/" style="font-size: 15px;">rsa</a> <a href="/tags/tb/" style="font-size: 15px;">tb</a> <a href="/tags/drawline/" style="font-size: 15px;">drawline</a> <a href="/tags/life/" style="font-size: 15px;">life</a> <a href="/tags/strategy/" style="font-size: 15px;">strategy</a> <a href="/tags/tblife/" style="font-size: 15px;">tblife</a> <a href="/tags/java/" style="font-size: 15px;">java</a> <a href="/tags/linux/" style="font-size: 15px;">linux</a> <a href="/tags/spring/" style="font-size: 15px;">spring</a> <a href="/tags/server/" style="font-size: 15px;">server</a> <a href="/tags/c/" style="font-size: 15px;">c</a> <a href="/tags/c/" style="font-size: 15px;">c++</a> <a href="/tags/lua/" style="font-size: 15px;">lua</a> <a href="/tags/android/" style="font-size: 15px;">android</a> <a href="/tags/javascript/" style="font-size: 15px;">javascript</a> <a href="/tags/neuralnetwork/" style="font-size: 15px;">neuralnetwork</a> <a href="/tags/cpu/" style="font-size: 15px;">cpu</a> <a href="/tags/disk/" style="font-size: 15px;">disk</a> <a href="/tags/fidsk/" style="font-size: 15px;">fidsk</a> <a href="/tags/fstab/" style="font-size: 15px;">fstab</a> <a href="/tags/lvm/" style="font-size: 15px;">lvm</a> <a href="/tags/aix/" style="font-size: 15px;">aix</a></div></div><div class="widget"><div class="widget-title"><i class="fa fa-file-o"> Letzte</i></div><ul class="post-list"><li class="post-list-item"><a class="post-list-link" href="/2016/11/18/2016-11-18-springmvc_source_004_viewresolver/">[KANMARS原创]-SpringMVC源码解析(4) - 视图处理器</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/18/2016-11-18-springmvc_source_003_requestprocess/">[KANMARS原创]-SpringMVC源码解析(3) - 请求处理过程</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/17/2016-11-17-springmvc_source_002_start/">[KANMARS原创]-SpringMVC源码解析(2) - 启动过程</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/17/2016-11-17-springmvc_source_001_introduce/">[KANMARS原创]-SpringMVC源码解析(1) - 简介</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/04/2016-11-04-SomeThingAndNothing/">SomeThingAndNothing</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/25/2016-10-25-news-LongRoad/">news It's a Long Road</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/19/2016-10-19-Scale-Services/">On Designing and Deploying Internet-Scale Services</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/18/2016-10-18-dubbo_source_006_summarize/">[KANMARS原创]-DUBBO源码解析(6)-summarize</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/18/2016-10-18-dubbo_source_005_consumerCall/">[KANMARS原创]-DUBBO源码解析(5)-consumerCall</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/09/19/2016-09-08-dubbo_source_004_referenceBean/">[KANMARS原创]-DUBBO源码解析(4)-referenceBean</a></li></ul></div><div class="widget"><div class="comments-title"><i class="fa fa-comment-o"> Letzte Kommentare</i></div><div data-num-items="5" data-show-avatars="0" data-show-time="1" data-show-admin="0" data-excerpt-length="32" data-show-title="1" class="ds-recent-comments"></div></div><div class="widget"><div class="widget-title"><i class="fa fa-external-link"> Blogroll</i></div><ul></ul><a href="http://www.linux.cn" title="Linux-CN" target="_blank">Linux-CN</a><ul></ul><a href="http://www.gome.com.cn" title="国美互联网" target="_blank">国美互联网</a><ul></ul><a href="http://jr.gome.com.cn" title="国美金融" target="_blank">国美金融</a></div></div></div><div class="pure-u-1 pure-u-md-3-4"><div id="footer">© <a href="/." rel="nofollow">KANMARS的博客.</a> Powered by<a rel="nofollow" target="_blank" href="https://hexo.io"> Hexo.</a><a rel="nofollow" target="_blank" href="https://github.com/tufu9441/maupassant-hexo"> Theme</a> by<a rel="nofollow" target="_blank" href="https://github.com/pagecho"> Cho.</a></div></div></div><a id="rocket" href="#top" class="show"></a><script type="text/javascript" src="/js/totop.js?v=0.0.0" async></script><script type="text/javascript" src="//cdn.bootcss.com/fancybox/2.1.5/jquery.fancybox.pack.js" async></script><script type="text/javascript" src="/js/fancybox.js?v=0.0.0" async></script><link rel="stylesheet" type="text/css" href="/css/jquery.fancybox.css?v=0.0.0"><script>var duoshuoQuery = {short_name:'kanmars'};
+(function() {
+    var ds = document.createElement('script');
+    ds.type = 'text/javascript';ds.async = true;
+    ds.src = (document.location.protocol == 'https:' ? 'https:' : 'http:') + '//static.duoshuo.com/embed.js';
+    ds.charset = 'UTF-8';
+    (document.getElementsByTagName('head')[0]
+        || document.getElementsByTagName('body')[0]).appendChild(ds);
+})();
+</script><script type="text/javascript" src="/js/codeblock-resizer.js?v=0.0.0"></script><script type="text/javascript" src="/js/smartresize.js?v=0.0.0"></script></div></body></html>

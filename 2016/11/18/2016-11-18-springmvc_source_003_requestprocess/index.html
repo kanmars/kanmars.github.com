@@ -1,0 +1,104 @@
+<!DOCTYPE html><html lang="null"><head><meta http-equiv="content-type" content="text/html; charset=utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" name="viewport"><meta content="yes" name="apple-mobile-web-app-capable"><meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"><meta content="telephone=no" name="format-detection"><meta name="description"><title>[KANMARS原创]-SpringMVC源码解析(3) - 请求处理过程 | KANMARS的博客</title><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/normalize/5.0.0/normalize.min.css"><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/pure/0.6.0/pure-min.css"><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/pure/0.6.0/grids-responsive-min.css"><link rel="stylesheet" type="text/css" href="/css/style.css?v=0.0.0"><link rel="stylesheet" href="//cdn.bootcss.com/font-awesome/4.7.0/css/font-awesome.min.css"><script type="text/javascript" src="//cdn.bootcss.com/jquery/3.1.1/jquery.min.js"></script><link rel="Shortcut Icon" type="image/x-icon" href="/favicon.ico"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="apple-touch-icon-precomposed" href="/apple-touch-icon.png"></head><body><div class="body_container"><div id="header"><div class="site-name"><h1 class="hidden">[KANMARS原创]-SpringMVC源码解析(3) - 请求处理过程</h1><a id="logo" href="/.">KANMARS的博客</a><p class="description">helloword 2046。趁着，我会喜怒你会哀乐，唱几分钟情歌。</p></div><div id="nav-menu"><a href="/." class="current"><i class="fa fa-home"> Start</i></a><a href="/archives/"><i class="fa fa-archive"> Archiv</i></a><a href="/2016/04/23/2016-04-23-mysongs/"><i class="fa fa-user"> Über</i></a></div></div><div id="layout" class="pure-g"><div class="pure-u-1 pure-u-md-3-4"><div class="content_container"><div class="post"><h1 class="post-title">[KANMARS原创]-SpringMVC源码解析(3) - 请求处理过程</h1><div class="post-meta">Nov 18, 2016</div><a data-thread-key="2016/11/18/2016-11-18-springmvc_source_003_requestprocess/" href="/2016/11/18/2016-11-18-springmvc_source_003_requestprocess/#comments" class="ds-thread-count"></a><div class="post-content"><h1 id="二、SpringMVC的请求处理过程"><a href="#二、SpringMVC的请求处理过程" class="headerlink" title="二、SpringMVC的请求处理过程"></a>二、SpringMVC的请求处理过程</h1><p>上一章讲了SpringMVC的启动过程，包括DispatcherServlet的启动与spring的启动。这一章我们在SpringMVC已经启动的基础上，讲一个request是如何接受与处理的。</p>
+<h2 id="2-1、请求调用顺序"><a href="#2-1、请求调用顺序" class="headerlink" title="2.1、请求调用顺序"></a>2.1、请求调用顺序</h2><pre><code>FrameworkServlet.service()
+    └FrameworkServlet.processRequest(request, response);
+        └DispatcherServlet.doService(request, response);
+            └DispatcherServlet.doDispatch(request, response)；
+                ├HandlerExecutionChain mappedHandler=getHandler(request, false)
+                │    │    //SpringMVC中配置了很多handlerMapping，按顺序逐个调用
+                │    │    //如果某handlerMapping找到了Handler，则立刻返回
+                │    │    //一般来说，handlerMappings的顺序是：
+                │    │    //1、RequestMappingHandlerMapping//负责url到Handler名称映射
+                │    │    //2、BeanNameUrlHandlerMapping//负责url到Handler名称映射
+                │    │    //3、SimpleUrlHandlerMapping//负责url到Handler名称映射
+                │    └HandlerExecutionChain handler = handlerMappings.getHandler(request);
+                │        │    //以RequestMappingHandlerMapping为例
+                │        └RequestMappingHandlerMapping.getHandler(request)
+                │            └AbstractHandlerMapping.getHandler(request)
+                │                ├Object handler = getHandlerInternal(request);
+                │                │    └HandlerMethod hm = AbstractHandlerMethodMapping.getHandlerInternal(request);
+                │                │        ├String lookupPath = getUrlPathHelper().getLookupPathForRequest(request);
+                │                │        └HandlerMethod handlerMethod = lookupHandlerMethod(lookupPath, request);
+                │                │                └AbstractHandlerMethodMapping.lookupHandlerMethod(lookupPath, request);
+                │                └getHandlerExecutionChain(handler, request);
+                │                    ├for (MappedInterceptor mappedInterceptor : mappedInterceptors) 
+                │                    └chain.addInterceptor(mappedInterceptor.getInterceptor());
+                │                    //此步骤给handler增加interceptor
+                │                    //从此处可知springMVC的每次request请求都会动态组装HandlerExecutionChain
+                │
+                ├HandlerAdapter ha = getHandlerAdapter(mappedHandler.getHandler());
+                │    │//此步骤从handlerAdapters获取一个support支持当前handler的Adapters
+                │    └for (HandlerAdapter ha : this.handlerAdapters)if (ha.supports(handler))return ha;
+                │        │//以RequestMappingHandlerAdapter为例
+                │        └RequestMappingHandlerAdapter.supports(handler)
+                │            └AbstractHandlerMethodAdapter.supports(handler)
+                │                └return return handler instanceof HandlerMethod//根据上文可知handler为HandlerMethod，此处为true
+                │
+                ├mappedHandler.applyPreHandle(processedRequest, response)
+                │    ├HandlerInterceptor[] interceptors = getInterceptors()
+                │    └for(HandlerInterceptor h : interceptors)h.preHandle(request, response, this.handler)
+                │
+                ├ModelAndView mv = ha.handle(request, response, mappedHandler.getHandler());    
+                │    └RequestMappingHandlerAdapter.handle(request, response, mappedHandler.getHandler());    
+                │        └AbstractHandlerMethodAdapter.handle(request, response, mappedHandler.getHandler());    
+                │            └RequestMappingHandlerAdapter.handleInternal(request, response, (HandlerMethod) handler);
+                │                ├checkAndPrepare前处理：session过期，session检查等
+                │                └invokeHandleMethod(request, response, handlerMethod);
+                │                    ├ServletWebRequest webRequest = new ServletWebRequest(request, response);
+                │                    ├ServletInvocableHandlerMethod requestMappingMethod = createRequestMappingMethod(handlerMethod, binderFactory);
+                │                    ├ModelAndViewContainer mavContainer = new ModelAndViewContainer();
+                │                    ├requestMappingMethod.invokeAndHandle(webRequest, mavContainer);
+                │                    │    └ServletInvocableHandlerMethod.invokeAndHandle(webRequest, mavContainer);
+                │                    │        ├Object returnValue = invokeForRequest(webRequest, mavContainer, providedArgs);
+                │                    │        │    ├Object[] args = getMethodArgumentValues(request, mavContainer, providedArgs);
+                │                    │        │    └return InvocableHandlerMethod.invoke(args);
+                │                    │        │        └return getBridgedMethod().invoke(getBean(), args);//调用真正的Controller中的@RequestMapping注解的方法
+                │                    │        │
+                │                    │        └returnValueHandlers.handleReturnValue(returnValue, getReturnValueType(returnValue), mavContainer, webRequest);
+                │                    │            │//是一个数组的包装类new HandlerMethodReturnValueHandlerComposite().addHandlers(getDefaultReturnValueHandlers());
+                │                    │            │//在getDefaultReturnValueHandlers()中返回的是一个List&lt;HandlerMethodReturnValueHandler&gt;
+                │                    │            │//例如ModelAndViewMethodReturnValueHandler、ViewNameMethodReturnValueHandler、ModelMethodProcessor、ViewMethodReturnValueHandler
+                │                    │            │//最常用的是前两个ModeAndView处理器和ViewName处理器，分别对应方法返回ModelAndView和String两种情况。只要命中一个，则不再执行下一个handler
+                │                    │            │//以下以ModelAndViewMethodReturnValueHandler为例
+                │                    │            ├mavContainer.setViewName(viewName);
+                │                    │            └mavContainer.setRedirectModelScenario(true);
+                │                    │
+                │                    └return getModelAndView(mavContainer, modelFactory, webRequest);
+                │                        └ModelAndView mav = new ModelAndView(mavContainer.getViewName(), mavContainer.getModel());
+                │
+                ├mappedHandler.applyPostHandle(processedRequest, response, mv);
+                │    ├HandlerInterceptor[] interceptors = getInterceptors()
+                │    └for(HandlerInterceptor h : interceptors)h.postHandle(request, response, mv)
+                └processDispatchResult(processedRequest, response, mappedHandler, mv, dispatchException);    
+                    ├render(mv, request, response);
+                    │    ├View view = viewResolver.resolveViewName(mv.getViewName(), locale);//此处viewResolover常用的是FreeMarkerViewResolver，返回FreeMarkerView
+                    │    └view.render(mv.getModelInternal(), request, response);
+                    │        ├Map&lt;String, Object&gt; mergedModel = createMergedOutputModel(model, request, response);
+                    │        ├prepareResponse(request, response);
+                    │        └renderMergedOutputModel(mergedModel, request, response);
+                    │            └FreeMarkerView.doRender(model, request, response);
+                    │                └template.process(model, response.getWriter());//给用户输出内容
+                    │    
+                    └mappedHandler.triggerAfterCompletion(request, response, null);
+                        ├HandlerInterceptor[] interceptors = getInterceptors()
+                        └for(HandlerInterceptor h : interceptors)h.afterCompletion(request, response, ex)
+</code></pre><h2 id="2-2、请求调用总结"><a href="#2-2、请求调用总结" class="headerlink" title="2.2、请求调用总结"></a>2.2、请求调用总结</h2><p>在DispatcherServlet的调用过程中</p>
+<p>1、根据系统初始化出的HandlrMapping解析URL，获取到具体的HandlerMethod</p>
+<p>2、对HandlerMethod增加interceptor，最终生成HandlerExecutionChain</p>
+<p>3、根据handler生成HandlerAdapter，在HandlerAdapter内具有更高级的操作</p>
+<p>4、执行interceptors的prehandler</p>
+<p>5、通过handlerAdapter处理session处理，请求封装，调用实际方法，返回结果封装，返回结果转换为ModelAndView</p>
+<p>6、执行interceptors的posthandler，因为在第五步已经将返回结果封装为ModelAndView，因此postHandle的参数为ModelAndView</p>
+<p>7、通过viewResolver获取到view，进而通过view.render把响应结果发送给客户端</p>
+<p>8、调用interceptor的afterCompletion方法。</p>
+<hr>
+<p>以上即是SpringMVC的请求调用过程，其细节上还有很多可追究的地方，不再一一讨论。</p>
+</div><script type="text/javascript" src="/js/share.js?v=0.0.0" async></script><a data-url="https://kanmars.github.io/2016/11/18/2016-11-18-springmvc_source_003_requestprocess/" data-id="ciwjetzgf003048vqpg37ccjk" class="article-share-link">Aktie</a><div class="tags"><a href="/tags/server/">server</a><a href="/tags/java/">java</a></div><div class="post-nav"><a href="/2016/11/18/2016-11-18-springmvc_source_004_viewresolver/" class="pre">[KANMARS原创]-SpringMVC源码解析(4) - 视图处理器</a><a href="/2016/11/17/2016-11-17-springmvc_source_002_start/" class="next">[KANMARS原创]-SpringMVC源码解析(2) - 启动过程</a></div><div data-thread-key="2016/11/18/2016-11-18-springmvc_source_003_requestprocess/" data-title="[KANMARS原创]-SpringMVC源码解析(3) - 请求处理过程" data-url="https://kanmars.github.io/2016/11/18/2016-11-18-springmvc_source_003_requestprocess/" class="ds-share flat"><div class="ds-share-inline"><ul class="ds-share-icons-16"><li data-toggle="ds-share-icons-more"><a href="javascript:void(0);" class="ds-more">分享到：</a></li><li><a href="javascript:void(0);" data-service="weibo" class="ds-weibo">微博</a></li><li><a href="javascript:void(0);" data-service="qzone" class="ds-qzone">QQ空间</a></li><li><a href="javascript:void(0);" data-service="qqt" class="ds-qqt">腾讯微博</a></li><li><a href="javascript:void(0);" data-service="wechat" class="ds-wechat">微信</a></li></ul><div class="ds-share-icons-more"></div></div></div><div data-thread-key="2016/11/18/2016-11-18-springmvc_source_003_requestprocess/" data-title="[KANMARS原创]-SpringMVC源码解析(3) - 请求处理过程" data-url="https://kanmars.github.io/2016/11/18/2016-11-18-springmvc_source_003_requestprocess/" data-author-key="1" class="ds-thread"></div></div></div></div><div class="pure-u-1-4 hidden_mid_and_down"><div id="sidebar"><div class="widget"><form action="//www.baidu.com/baidu" method="get" accept-charset="utf-8" target="_blank" class="search-form"><input type="search" name="word" maxlength="20" placeholder="Search"/><input type="hidden" name="si" value="https://kanmars.github.io"/><input name="tn" type="hidden" value="bds"/><input name="cl" type="hidden" value="3"/><input name="ct" type="hidden" value="2097152"/><input name="s" type="hidden" value="on"/></form></div><div class="widget"><div class="widget-title"><i class="fa fa-folder-o"> Kategorien</i></div></div><div class="widget"><div class="widget-title"><i class="fa fa-star-o"> Tags</i></div><div class="tagcloud"><a href="/tags/jetty/" style="font-size: 15px;">jetty</a> <a href="/tags/it/" style="font-size: 15px;">it</a> <a href="/tags/architecture/" style="font-size: 15px;">architecture</a> <a href="/tags/itlife/" style="font-size: 15px;">itlife</a> <a href="/tags/rsa/" style="font-size: 15px;">rsa</a> <a href="/tags/tb/" style="font-size: 15px;">tb</a> <a href="/tags/drawline/" style="font-size: 15px;">drawline</a> <a href="/tags/life/" style="font-size: 15px;">life</a> <a href="/tags/strategy/" style="font-size: 15px;">strategy</a> <a href="/tags/tblife/" style="font-size: 15px;">tblife</a> <a href="/tags/java/" style="font-size: 15px;">java</a> <a href="/tags/linux/" style="font-size: 15px;">linux</a> <a href="/tags/spring/" style="font-size: 15px;">spring</a> <a href="/tags/server/" style="font-size: 15px;">server</a> <a href="/tags/c/" style="font-size: 15px;">c</a> <a href="/tags/c/" style="font-size: 15px;">c++</a> <a href="/tags/lua/" style="font-size: 15px;">lua</a> <a href="/tags/android/" style="font-size: 15px;">android</a> <a href="/tags/javascript/" style="font-size: 15px;">javascript</a> <a href="/tags/neuralnetwork/" style="font-size: 15px;">neuralnetwork</a> <a href="/tags/cpu/" style="font-size: 15px;">cpu</a> <a href="/tags/disk/" style="font-size: 15px;">disk</a> <a href="/tags/fidsk/" style="font-size: 15px;">fidsk</a> <a href="/tags/fstab/" style="font-size: 15px;">fstab</a> <a href="/tags/lvm/" style="font-size: 15px;">lvm</a> <a href="/tags/aix/" style="font-size: 15px;">aix</a></div></div><div class="widget"><div class="widget-title"><i class="fa fa-file-o"> Letzte</i></div><ul class="post-list"><li class="post-list-item"><a class="post-list-link" href="/2016/11/18/2016-11-18-springmvc_source_004_viewresolver/">[KANMARS原创]-SpringMVC源码解析(4) - 视图处理器</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/18/2016-11-18-springmvc_source_003_requestprocess/">[KANMARS原创]-SpringMVC源码解析(3) - 请求处理过程</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/17/2016-11-17-springmvc_source_002_start/">[KANMARS原创]-SpringMVC源码解析(2) - 启动过程</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/17/2016-11-17-springmvc_source_001_introduce/">[KANMARS原创]-SpringMVC源码解析(1) - 简介</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/04/2016-11-04-SomeThingAndNothing/">SomeThingAndNothing</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/25/2016-10-25-news-LongRoad/">news It's a Long Road</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/19/2016-10-19-Scale-Services/">On Designing and Deploying Internet-Scale Services</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/18/2016-10-18-dubbo_source_006_summarize/">[KANMARS原创]-DUBBO源码解析(6)-summarize</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/18/2016-10-18-dubbo_source_005_consumerCall/">[KANMARS原创]-DUBBO源码解析(5)-consumerCall</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/09/19/2016-09-08-dubbo_source_004_referenceBean/">[KANMARS原创]-DUBBO源码解析(4)-referenceBean</a></li></ul></div><div class="widget"><div class="comments-title"><i class="fa fa-comment-o"> Letzte Kommentare</i></div><div data-num-items="5" data-show-avatars="0" data-show-time="1" data-show-admin="0" data-excerpt-length="32" data-show-title="1" class="ds-recent-comments"></div></div><div class="widget"><div class="widget-title"><i class="fa fa-external-link"> Blogroll</i></div><ul></ul><a href="http://www.linux.cn" title="Linux-CN" target="_blank">Linux-CN</a><ul></ul><a href="http://www.gome.com.cn" title="国美互联网" target="_blank">国美互联网</a><ul></ul><a href="http://jr.gome.com.cn" title="国美金融" target="_blank">国美金融</a></div></div></div><div class="pure-u-1 pure-u-md-3-4"><div id="footer">© <a href="/." rel="nofollow">KANMARS的博客.</a> Powered by<a rel="nofollow" target="_blank" href="https://hexo.io"> Hexo.</a><a rel="nofollow" target="_blank" href="https://github.com/tufu9441/maupassant-hexo"> Theme</a> by<a rel="nofollow" target="_blank" href="https://github.com/pagecho"> Cho.</a></div></div></div><a id="rocket" href="#top" class="show"></a><script type="text/javascript" src="/js/totop.js?v=0.0.0" async></script><script type="text/javascript" src="//cdn.bootcss.com/fancybox/2.1.5/jquery.fancybox.pack.js" async></script><script type="text/javascript" src="/js/fancybox.js?v=0.0.0" async></script><link rel="stylesheet" type="text/css" href="/css/jquery.fancybox.css?v=0.0.0"><script>var duoshuoQuery = {short_name:'kanmars'};
+(function() {
+    var ds = document.createElement('script');
+    ds.type = 'text/javascript';ds.async = true;
+    ds.src = (document.location.protocol == 'https:' ? 'https:' : 'http:') + '//static.duoshuo.com/embed.js';
+    ds.charset = 'UTF-8';
+    (document.getElementsByTagName('head')[0]
+        || document.getElementsByTagName('body')[0]).appendChild(ds);
+})();
+</script><script type="text/javascript" src="/js/codeblock-resizer.js?v=0.0.0"></script><script type="text/javascript" src="/js/smartresize.js?v=0.0.0"></script></div></body></html>

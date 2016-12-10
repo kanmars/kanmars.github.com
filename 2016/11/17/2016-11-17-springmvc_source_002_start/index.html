@@ -1,0 +1,198 @@
+<!DOCTYPE html><html lang="null"><head><meta http-equiv="content-type" content="text/html; charset=utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" name="viewport"><meta content="yes" name="apple-mobile-web-app-capable"><meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"><meta content="telephone=no" name="format-detection"><meta name="description"><title>[KANMARS原创]-SpringMVC源码解析(2) - 启动过程 | KANMARS的博客</title><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/normalize/5.0.0/normalize.min.css"><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/pure/0.6.0/pure-min.css"><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/pure/0.6.0/grids-responsive-min.css"><link rel="stylesheet" type="text/css" href="/css/style.css?v=0.0.0"><link rel="stylesheet" href="//cdn.bootcss.com/font-awesome/4.7.0/css/font-awesome.min.css"><script type="text/javascript" src="//cdn.bootcss.com/jquery/3.1.1/jquery.min.js"></script><link rel="Shortcut Icon" type="image/x-icon" href="/favicon.ico"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="apple-touch-icon-precomposed" href="/apple-touch-icon.png"></head><body><div class="body_container"><div id="header"><div class="site-name"><h1 class="hidden">[KANMARS原创]-SpringMVC源码解析(2) - 启动过程</h1><a id="logo" href="/.">KANMARS的博客</a><p class="description">helloword 2046。趁着，我会喜怒你会哀乐，唱几分钟情歌。</p></div><div id="nav-menu"><a href="/." class="current"><i class="fa fa-home"> Start</i></a><a href="/archives/"><i class="fa fa-archive"> Archiv</i></a><a href="/2016/04/23/2016-04-23-mysongs/"><i class="fa fa-user"> Über</i></a></div></div><div id="layout" class="pure-g"><div class="pure-u-1 pure-u-md-3-4"><div class="content_container"><div class="post"><h1 class="post-title">[KANMARS原创]-SpringMVC源码解析(2) - 启动过程</h1><div class="post-meta">Nov 17, 2016</div><a data-thread-key="2016/11/17/2016-11-17-springmvc_source_002_start/" href="/2016/11/17/2016-11-17-springmvc_source_002_start/#comments" class="ds-thread-count"></a><div class="post-content"><h1 id="一、SpringMVC的启动过程"><a href="#一、SpringMVC的启动过程" class="headerlink" title="一、SpringMVC的启动过程"></a>一、SpringMVC的启动过程</h1><p>SpringMVC的启动过程即为Servlet的启动和Spring的启动两部分。</p>
+<p>我们对SpringMVC的典型配置，是在web.xml中配置一个DispatcherServlet</p>
+<p>因此我们需要从DispatcherServlet的启动说起。</p>
+<h2 id="1-1、DispatcherServlet的继承结构"><a href="#1-1、DispatcherServlet的继承结构" class="headerlink" title="1.1、DispatcherServlet的继承结构"></a>1.1、DispatcherServlet的继承结构</h2><p>DispatcherServlet的继承结构简单来说如下：</p>
+<p>DispatcherServlet-&gt;FrameworkServlet-&gt;HttpServletBean-&gt;HttpServlet</p>
+<p>因此如果要看DispatcherServlet是如何启动的，需要从init()方法开始。</p>
+<p>即：HttpServletBean.init();</p>
+<h2 id="1-2、DispatcherServlet的启动过程"><a href="#1-2、DispatcherServlet的启动过程" class="headerlink" title="1.2、DispatcherServlet的启动过程"></a>1.2、DispatcherServlet的启动过程</h2><p>有人喜欢用时序图来画启动过程，而我喜欢用调用顺序来画。</p>
+<pre><code>DispatcherServlet.init()
+    ├new ServletConfigPropertyValues(getServletConfig(), this.requiredProperties)//读取配置信息
+    └DispatcherServlet.initServletBean()初始化ServletBean
+        └FrameworkServlet.initServletBean()
+            ├FrameworkServlet.webApplicationContext = initWebApplicationContext()//启动Spring
+            │    ├FrameworkServlet.wac = createWebApplicationContext(rootContext);
+            │    │    ├wac =(ConfigurableWebApplicationContext) BeanUtils.instantiateClass(XmlWebApplicationContext.class);
+            │    │    └FrameworkServlet.configureAndRefreshWebApplicationContext(wac)
+            │    │        └wac.refresh()//根据springXML文件启动Spring
+            │    └FrameworkServlet.onRefresh(wac)
+            │        └DispatcherServlet.onRefresh(wac)
+            │            └DispatcherServlet.initStrategies(wac)
+            │                ├DispatcherServlet.initMultipartResolver(context)//从wac中获取对象
+            │                ├DispatcherServlet.initLocaleResolver(context)//从wac中获取对象
+            │                ├DispatcherServlet.initThemeResolver(context)//从wac中获取对象
+            │                ├DispatcherServlet.initHandlerMappings(context)//从wac中获取对象
+            │                ├DispatcherServlet.initHandlerAdapters(context)//从wac中获取对象
+            │                ├DispatcherServlet.initHandlerExceptionResolvers(context)//从wac中获取对象
+            │                ├DispatcherServlet.initRequestToViewNameTranslator(context)//从wac中获取对象
+            │                ├DispatcherServlet.initViewResolvers(context)//从wac中获取对象
+            │                └DispatcherServlet.initFlashMapManager(context)//从wac中获取对象
+            └FrameworkServlet.initFrameworkServlet()//从wac中获取对象
+</code></pre><h2 id="1-3、DispatcherServlet的默认配置"><a href="#1-3、DispatcherServlet的默认配置" class="headerlink" title="1.3、DispatcherServlet的默认配置"></a>1.3、DispatcherServlet的默认配置</h2><p>DispatcherServlet的默认配置在DispatcherServlet.properties中</p>
+<pre><code>org.springframework.web.servlet.LocaleResolver=org.springframework.web.servlet.i18n.AcceptHeaderLocaleResolver
+
+org.springframework.web.servlet.ThemeResolver=org.springframework.web.servlet.theme.FixedThemeResolver
+
+org.springframework.web.servlet.HandlerMapping=org.springframework.web.servlet.handler.BeanNameUrlHandlerMapping,\
+    org.springframework.web.servlet.mvc.annotation.DefaultAnnotationHandlerMapping
+
+org.springframework.web.servlet.HandlerAdapter=org.springframework.web.servlet.mvc.HttpRequestHandlerAdapter,\
+    org.springframework.web.servlet.mvc.SimpleControllerHandlerAdapter,\
+    org.springframework.web.servlet.mvc.annotation.AnnotationMethodHandlerAdapter
+
+org.springframework.web.servlet.HandlerExceptionResolver=org.springframework.web.servlet.mvc.annotation.AnnotationMethodHandlerExceptionResolver,\
+    org.springframework.web.servlet.mvc.annotation.ResponseStatusExceptionResolver,\
+    org.springframework.web.servlet.mvc.support.DefaultHandlerExceptionResolver
+
+org.springframework.web.servlet.RequestToViewNameTranslator=org.springframework.web.servlet.view.DefaultRequestToViewNameTranslator
+
+org.springframework.web.servlet.ViewResolver=org.springframework.web.servlet.view.InternalResourceViewResolver
+
+org.springframework.web.servlet.FlashMapManager=org.springframework.web.servlet.support.SessionFlashMapManager
+</code></pre><p>分别代表了不同模块的实现类，我们需要注意的、最重要的有如下几种(其他的一些类也有作用，但是对我个人而言，最重要的还是这三种)：</p>
+<pre><code>handlerMapping:RequestMappingHandlerMapping
+
+handlerAdapter:RequestMappingHandlerAdapter
+
+viewResolver:FreeMarkerViewResolver
+</code></pre><h2 id="1-4、Spring的启动过程wac-refresh"><a href="#1-4、Spring的启动过程wac-refresh" class="headerlink" title="1.4、Spring的启动过程wac.refresh()"></a>1.4、Spring的启动过程wac.refresh()</h2><p>Spring的启动过程是一致的，从spring.xml开始加载，例如：</p>
+<pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;beans xmlns=&quot;http://www.springframework.org/schema/beans&quot;
+    xmlns:util=&quot;http://www.springframework.org/schema/util&quot;  
+    xmlns:aop=&quot;http://www.springframework.org/schema/aop&quot; 
+    xmlns:context=&quot;http://www.springframework.org/schema/context&quot;
+    xmlns:tx=&quot;http://www.springframework.org/schema/tx&quot;
+    xmlns:xsi=&quot;http://www.w3.org/2001/XMLSchema-instance&quot;
+    xmlns:mongo=&quot;http://www.springframework.org/schema/data/mongo&quot;
+    xmlns:task=&quot;http://www.springframework.org/schema/task&quot;
+    xmlns:mvc=&quot;http://www.springframework.org/schema/mvc&quot;
+    xsi:schemaLocation=&quot;http://www.springframework.org/schema/aop  
+        http://www.springframework.org/schema/aop/spring-aop.xsd  
+        http://www.springframework.org/schema/beans  
+        http://www.springframework.org/schema/beans/spring-beans.xsd  
+        http://www.springframework.org/schema/context  
+        http://www.springframework.org/schema/context/spring-context.xsd  
+        http://www.springframework.org/schema/tx  
+        http://www.springframework.org/schema/tx/spring-tx.xsd
+        http://www.springframework.org/schema/task  
+        http://www.springframework.org/schema/task/spring-task-3.1.xsd
+        http://www.springframework.org/schema/util 
+        http://www.springframework.org/schema/util/spring-util-3.1.xsd
+        http://www.springframework.org/schema/mvc
+        http://www.springframework.org/schema/mvc/spring-mvc-3.1.xsd&quot;&gt;
+
+    &lt;mvc:default-servlet-handler /&gt;
+    &lt;mvc:annotation-driven ignoreDefaultModelOnRedirect=&quot;true&quot;/&gt;
+    &lt;aop:aspectj-autoproxy proxy-target-class=&quot;true&quot;/&gt;
+    &lt;context:annotation-config&gt;&lt;/context:annotation-config&gt;
+    &lt;context:component-scan base-package=&quot;cn.com.gome.sn.admin&quot; /&gt;
+
+    &lt;!-- 文件上传解析器 --&gt;  
+    &lt;bean id=&quot;multipartResolver&quot; class=&quot;org.springframework.web.multipart.commons.CommonsMultipartResolver&quot;&gt;  
+        &lt;property name=&quot;defaultEncoding&quot; value=&quot;utf-8&quot;&gt;&lt;/property&gt;  
+        &lt;property name=&quot;maxInMemorySize&quot; value=&quot;10960&quot;&gt;&lt;/property&gt;  
+    &lt;/bean&gt;
+    &lt;bean id=&quot;springBeanFactory&quot; class=&quot;cn.com.gome.frame.util.SpringBeanFactory&quot;/&gt;
+    &lt;util:properties id=&quot;SN_admin&quot; location=&quot;classpath:props/SN-admin.properties&quot; /&gt;
+    &lt;!--登录验证--&gt;
+    &lt;mvc:interceptors&gt;
+        &lt;mvc:interceptor&gt;
+            &lt;mvc:mapping path=&quot;/**/*.dhtml&quot;/&gt;
+            &lt;bean class=&quot;cn.com.gome.sn.admin.intercepter.SessionInterceptor&quot;&gt;
+                &lt;property name=&quot;allowUrls&quot;&gt;
+                    &lt;list&gt;
+                        &lt;value&gt;/login/login.dhtml&lt;/value&gt;
+                    &lt;/list&gt;
+                &lt;/property&gt;
+            &lt;/bean&gt;
+        &lt;/mvc:interceptor&gt;
+    &lt;/mvc:interceptors&gt;
+&lt;/beans&gt;
+</code></pre><p>可以看到其中比较重要的Bean如下：</p>
+<mvc:default-servlet-handler>
+
+<mvc:annotation-driven ignoredefaultmodelonredirect="true">
+
+<aop:aspectj-autoproxy proxy-target-class="true">
+
+<p>经查看SpringMVC的NamespaceHandler为org.springframework.web.servlet.config.MvcNamespaceHandler</p>
+<p><strong>1、default-servlet-handler的解析过程如下：</strong></p>
+<pre><code>DefaultServletHandlerBeanDefinitionParser.parse()
+    ├defaultServletHandlerDef=new RootBeanDefinition(DefaultServletHttpRequestHandler.class);
+    ├handlerMappingDef=new RootBeanDefinition(SimpleUrlHandlerMapping.class);
+    └MvcNamespaceUtils.registerDefaultComponents(parserContext, source);
+        ├registerBeanNameUrlHandlerMapping(parserContext, source);
+        │    └beanNameMappingDef = new RootBeanDefinition(BeanNameUrlHandlerMapping.class);
+        ├registerHttpRequestHandlerAdapter(parserContext, source);
+        │    └handlerAdapterDef = new RootBeanDefinition(HttpRequestHandlerAdapter.class);
+        └registerSimpleControllerHandlerAdapter(parserContext, source);
+            └handlerAdapterDef = new RootBeanDefinition(SimpleControllerHandlerAdapter.class);
+</code></pre><p>在使用该标签之后，注册了一些BeanDefinition到SpringFactory中</p>
+<p><strong>2、annotation-driven的解析过程如下：</strong></p>
+<pre><code>AnnotationDrivenBeanDefinitionParser.parse()
+    ├handlerMappingDef = new RootBeanDefinition(RequestMappingHandlerMapping.class);
+    ├bindingDef = new RootBeanDefinition(ConfigurableWebBindingInitializer.class);
+    ├handlerAdapterDef = new RootBeanDefinition(RequestMappingHandlerAdapter.class);
+    ├csInterceptorDef = new RootBeanDefinition(ConversionServiceExposingInterceptor.class);
+    ├exceptionHandlerExceptionResolver = new RootBeanDefinition(ExceptionHandlerExceptionResolver.class);
+    ├responseStatusExceptionResolver = new RootBeanDefinition(ResponseStatusExceptionResolver.class);
+    └defaultExceptionResolver = new RootBeanDefinition(DefaultHandlerExceptionResolver.class);
+</code></pre><p><strong>3、aspectj-autoproxy的解析过程：</strong></p>
+<pre><code>纯技术上说aspectj-autoproxy与SpringMVC没关系，此处仅说明一个参数：
+&lt;aop:aspectj-autoproxy proxy-target-class=&quot;true&quot;/&gt;
+
+a)  proxy-target-class如果为true，则代理使用cglib实现
+b)  proxy-target-class如果为false，则代理使用java原生接口代理实现
+</code></pre><h2 id="1-5、回头来看DispatcherServlet的启动过程"><a href="#1-5、回头来看DispatcherServlet的启动过程" class="headerlink" title="1.5、回头来看DispatcherServlet的启动过程"></a>1.5、回头来看DispatcherServlet的启动过程</h2><pre><code>DispatcherServlet.init()
+    ├new ServletConfigPropertyValues(getServletConfig(), this.requiredProperties)//读取配置信息
+    └DispatcherServlet.initServletBean()初始化ServletBean
+        └FrameworkServlet.initServletBean()
+            ├FrameworkServlet.webApplicationContext = initWebApplicationContext()//启动Spring
+            │    ├FrameworkServlet.wac = createWebApplicationContext(rootContext);
+            │    │    ├wac =(ConfigurableWebApplicationContext) BeanUtils.instantiateClass(XmlWebApplicationContext.class);
+            │    │    └FrameworkServlet.configureAndRefreshWebApplicationContext(wac)
+            │    │        └wac.refresh()//根据springXML文件启动Spring
+            │    └FrameworkServlet.onRefresh(wac)
+            │        └DispatcherServlet.onRefresh(wac)
+            │            └DispatcherServlet.initStrategies(wac)
+            │                ├DispatcherServlet.initMultipartResolver(context)//从wac中获取对象
+            │                ├DispatcherServlet.initLocaleResolver(context)//从wac中获取对象
+            │                ├DispatcherServlet.initThemeResolver(context)//从wac中获取对象
+            │                ├DispatcherServlet.initHandlerMappings(context)//从wac中获取对象
+            │                ├DispatcherServlet.initHandlerAdapters(context)//从wac中获取对象
+            │                ├DispatcherServlet.initHandlerExceptionResolvers(context)//从wac中获取对象
+            │                ├DispatcherServlet.initRequestToViewNameTranslator(context)//从wac中获取对象
+            │                ├DispatcherServlet.initViewResolvers(context)//从wac中获取对象
+            │                └DispatcherServlet.initFlashMapManager(context)//从wac中获取对象
+            └FrameworkServlet.initFrameworkServlet()//从wac中获取对象
+</code></pre><p>在DispatcherServlet.initStrategies(wac)中</p>
+<pre><code>├DispatcherServlet.initMultipartResolver(context)//从wac中获取对象
+├DispatcherServlet.initLocaleResolver(context)//从wac中获取对象
+├DispatcherServlet.initThemeResolver(context)//从wac中获取对象
+├DispatcherServlet.initHandlerMappings(context)//从wac中获取对象
+├DispatcherServlet.initHandlerAdapters(context)//从wac中获取对象
+├DispatcherServlet.initHandlerExceptionResolvers(context)//从wac中获取对象
+├DispatcherServlet.initRequestToViewNameTranslator(context)//从wac中获取对
+├DispatcherServlet.initViewResolvers(context)//从wac中获取对象
+└DispatcherServlet.initFlashMapManager(context)//从wac中获取对象
+</code></pre><p>所获取的HandlerMappings、HandlerAdapters等信息，都是通过</p>
+<pre><code>&lt;mvc:default-servlet-handler /&gt;
+
+&lt;mvc:annotation-driven ignoreDefaultModelOnRedirect=&quot;true&quot;/&gt;
+</code></pre><p>定义出来，然后在DispatcherServlet的启动过程的最后一步初始化的。</p>
+<h2 id="1-6、SpringMVC的-RequestMapping自动扫描过程"><a href="#1-6、SpringMVC的-RequestMapping自动扫描过程" class="headerlink" title="1.6、SpringMVC的@RequestMapping自动扫描过程"></a>1.6、SpringMVC的@RequestMapping自动扫描过程</h2><p>SpringMVC的自动扫描是通过RequestMappingHandlerMapping.java的afterPropertiesSet()方法实现的。</p>
+<p>在RequestMappingHandlerMapping实例化后，会调用initControllerAdviceCache()方法，在此方法内，会遍历全部的bean，判断其方法是否有Annotation注解</p>
+<pre><code>ControllerAdvice.class
+RequestMapping.class
+ModelAttribute.class
+</code></pre><p>然后将对应的方法设置为bridgedMethod添加到modelAttributeAdviceCache中或者initBinderAdviceCache中</p>
+</aop:aspectj-autoproxy></mvc:annotation-driven></mvc:default-servlet-handler></div><script type="text/javascript" src="/js/share.js?v=0.0.0" async></script><a data-url="https://kanmars.github.io/2016/11/17/2016-11-17-springmvc_source_002_start/" data-id="ciwjetzgf003548vqkt55w0v3" class="article-share-link">Aktie</a><div class="tags"><a href="/tags/server/">server</a><a href="/tags/java/">java</a></div><div class="post-nav"><a href="/2016/11/18/2016-11-18-springmvc_source_003_requestprocess/" class="pre">[KANMARS原创]-SpringMVC源码解析(3) - 请求处理过程</a><a href="/2016/11/17/2016-11-17-springmvc_source_001_introduce/" class="next">[KANMARS原创]-SpringMVC源码解析(1) - 简介</a></div><div data-thread-key="2016/11/17/2016-11-17-springmvc_source_002_start/" data-title="[KANMARS原创]-SpringMVC源码解析(2) - 启动过程" data-url="https://kanmars.github.io/2016/11/17/2016-11-17-springmvc_source_002_start/" class="ds-share flat"><div class="ds-share-inline"><ul class="ds-share-icons-16"><li data-toggle="ds-share-icons-more"><a href="javascript:void(0);" class="ds-more">分享到：</a></li><li><a href="javascript:void(0);" data-service="weibo" class="ds-weibo">微博</a></li><li><a href="javascript:void(0);" data-service="qzone" class="ds-qzone">QQ空间</a></li><li><a href="javascript:void(0);" data-service="qqt" class="ds-qqt">腾讯微博</a></li><li><a href="javascript:void(0);" data-service="wechat" class="ds-wechat">微信</a></li></ul><div class="ds-share-icons-more"></div></div></div><div data-thread-key="2016/11/17/2016-11-17-springmvc_source_002_start/" data-title="[KANMARS原创]-SpringMVC源码解析(2) - 启动过程" data-url="https://kanmars.github.io/2016/11/17/2016-11-17-springmvc_source_002_start/" data-author-key="1" class="ds-thread"></div></div></div></div><div class="pure-u-1-4 hidden_mid_and_down"><div id="sidebar"><div class="widget"><form action="//www.baidu.com/baidu" method="get" accept-charset="utf-8" target="_blank" class="search-form"><input type="search" name="word" maxlength="20" placeholder="Search"/><input type="hidden" name="si" value="https://kanmars.github.io"/><input name="tn" type="hidden" value="bds"/><input name="cl" type="hidden" value="3"/><input name="ct" type="hidden" value="2097152"/><input name="s" type="hidden" value="on"/></form></div><div class="widget"><div class="widget-title"><i class="fa fa-folder-o"> Kategorien</i></div></div><div class="widget"><div class="widget-title"><i class="fa fa-star-o"> Tags</i></div><div class="tagcloud"><a href="/tags/jetty/" style="font-size: 15px;">jetty</a> <a href="/tags/it/" style="font-size: 15px;">it</a> <a href="/tags/architecture/" style="font-size: 15px;">architecture</a> <a href="/tags/itlife/" style="font-size: 15px;">itlife</a> <a href="/tags/rsa/" style="font-size: 15px;">rsa</a> <a href="/tags/tb/" style="font-size: 15px;">tb</a> <a href="/tags/drawline/" style="font-size: 15px;">drawline</a> <a href="/tags/life/" style="font-size: 15px;">life</a> <a href="/tags/strategy/" style="font-size: 15px;">strategy</a> <a href="/tags/tblife/" style="font-size: 15px;">tblife</a> <a href="/tags/java/" style="font-size: 15px;">java</a> <a href="/tags/linux/" style="font-size: 15px;">linux</a> <a href="/tags/spring/" style="font-size: 15px;">spring</a> <a href="/tags/server/" style="font-size: 15px;">server</a> <a href="/tags/c/" style="font-size: 15px;">c</a> <a href="/tags/c/" style="font-size: 15px;">c++</a> <a href="/tags/lua/" style="font-size: 15px;">lua</a> <a href="/tags/android/" style="font-size: 15px;">android</a> <a href="/tags/javascript/" style="font-size: 15px;">javascript</a> <a href="/tags/neuralnetwork/" style="font-size: 15px;">neuralnetwork</a> <a href="/tags/cpu/" style="font-size: 15px;">cpu</a> <a href="/tags/disk/" style="font-size: 15px;">disk</a> <a href="/tags/fidsk/" style="font-size: 15px;">fidsk</a> <a href="/tags/fstab/" style="font-size: 15px;">fstab</a> <a href="/tags/lvm/" style="font-size: 15px;">lvm</a> <a href="/tags/aix/" style="font-size: 15px;">aix</a></div></div><div class="widget"><div class="widget-title"><i class="fa fa-file-o"> Letzte</i></div><ul class="post-list"><li class="post-list-item"><a class="post-list-link" href="/2016/11/18/2016-11-18-springmvc_source_004_viewresolver/">[KANMARS原创]-SpringMVC源码解析(4) - 视图处理器</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/18/2016-11-18-springmvc_source_003_requestprocess/">[KANMARS原创]-SpringMVC源码解析(3) - 请求处理过程</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/17/2016-11-17-springmvc_source_002_start/">[KANMARS原创]-SpringMVC源码解析(2) - 启动过程</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/17/2016-11-17-springmvc_source_001_introduce/">[KANMARS原创]-SpringMVC源码解析(1) - 简介</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/04/2016-11-04-SomeThingAndNothing/">SomeThingAndNothing</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/25/2016-10-25-news-LongRoad/">news It's a Long Road</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/19/2016-10-19-Scale-Services/">On Designing and Deploying Internet-Scale Services</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/18/2016-10-18-dubbo_source_006_summarize/">[KANMARS原创]-DUBBO源码解析(6)-summarize</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/18/2016-10-18-dubbo_source_005_consumerCall/">[KANMARS原创]-DUBBO源码解析(5)-consumerCall</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/09/19/2016-09-08-dubbo_source_004_referenceBean/">[KANMARS原创]-DUBBO源码解析(4)-referenceBean</a></li></ul></div><div class="widget"><div class="comments-title"><i class="fa fa-comment-o"> Letzte Kommentare</i></div><div data-num-items="5" data-show-avatars="0" data-show-time="1" data-show-admin="0" data-excerpt-length="32" data-show-title="1" class="ds-recent-comments"></div></div><div class="widget"><div class="widget-title"><i class="fa fa-external-link"> Blogroll</i></div><ul></ul><a href="http://www.linux.cn" title="Linux-CN" target="_blank">Linux-CN</a><ul></ul><a href="http://www.gome.com.cn" title="国美互联网" target="_blank">国美互联网</a><ul></ul><a href="http://jr.gome.com.cn" title="国美金融" target="_blank">国美金融</a></div></div></div><div class="pure-u-1 pure-u-md-3-4"><div id="footer">© <a href="/." rel="nofollow">KANMARS的博客.</a> Powered by<a rel="nofollow" target="_blank" href="https://hexo.io"> Hexo.</a><a rel="nofollow" target="_blank" href="https://github.com/tufu9441/maupassant-hexo"> Theme</a> by<a rel="nofollow" target="_blank" href="https://github.com/pagecho"> Cho.</a></div></div></div><a id="rocket" href="#top" class="show"></a><script type="text/javascript" src="/js/totop.js?v=0.0.0" async></script><script type="text/javascript" src="//cdn.bootcss.com/fancybox/2.1.5/jquery.fancybox.pack.js" async></script><script type="text/javascript" src="/js/fancybox.js?v=0.0.0" async></script><link rel="stylesheet" type="text/css" href="/css/jquery.fancybox.css?v=0.0.0"><script>var duoshuoQuery = {short_name:'kanmars'};
+(function() {
+    var ds = document.createElement('script');
+    ds.type = 'text/javascript';ds.async = true;
+    ds.src = (document.location.protocol == 'https:' ? 'https:' : 'http:') + '//static.duoshuo.com/embed.js';
+    ds.charset = 'UTF-8';
+    (document.getElementsByTagName('head')[0]
+        || document.getElementsByTagName('body')[0]).appendChild(ds);
+})();
+</script><script type="text/javascript" src="/js/codeblock-resizer.js?v=0.0.0"></script><script type="text/javascript" src="/js/smartresize.js?v=0.0.0"></script></div></body></html>
