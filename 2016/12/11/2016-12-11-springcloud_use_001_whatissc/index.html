@@ -1,0 +1,105 @@
+<!DOCTYPE html><html lang="null"><head><meta http-equiv="content-type" content="text/html; charset=utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" name="viewport"><meta content="yes" name="apple-mobile-web-app-capable"><meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"><meta content="telephone=no" name="format-detection"><meta name="description"><title>[KANMARS原创]-SpringCloud-实用篇(1)-什么是springCLoud | KANMARS的博客</title><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/normalize/5.0.0/normalize.min.css"><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/pure/0.6.0/pure-min.css"><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/pure/0.6.0/grids-responsive-min.css"><link rel="stylesheet" type="text/css" href="/css/style.css?v=0.0.0"><link rel="stylesheet" href="//cdn.bootcss.com/font-awesome/4.7.0/css/font-awesome.min.css"><script type="text/javascript" src="//cdn.bootcss.com/jquery/3.1.1/jquery.min.js"></script><link rel="Shortcut Icon" type="image/x-icon" href="/favicon.ico"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="apple-touch-icon-precomposed" href="/apple-touch-icon.png"></head><body><div class="body_container"><div id="header"><div class="site-name"><h1 class="hidden">[KANMARS原创]-SpringCloud-实用篇(1)-什么是springCLoud</h1><a id="logo" href="/.">KANMARS的博客</a><p class="description">helloword 2046。趁着，我会喜怒你会哀乐，唱几分钟情歌。</p></div><div id="nav-menu"><a href="/." class="current"><i class="fa fa-home"> Start</i></a><a href="/archives/"><i class="fa fa-archive"> Archiv</i></a><a href="/2016/04/23/2016-04-23-mysongs/"><i class="fa fa-user"> Über</i></a></div></div><div id="layout" class="pure-g"><div class="pure-u-1 pure-u-md-3-4"><div class="content_container"><div class="post"><h1 class="post-title">[KANMARS原创]-SpringCloud-实用篇(1)-什么是springCLoud</h1><div class="post-meta">Dec 11, 2016</div><a data-thread-key="2016/12/11/2016-12-11-springcloud_use_001_whatissc/" href="/2016/12/11/2016-12-11-springcloud_use_001_whatissc/#comments" class="ds-thread-count"></a><div class="post-content"><h1 id="一、SpringCloud概述"><a href="#一、SpringCloud概述" class="headerlink" title="一、SpringCloud概述"></a>一、SpringCloud概述</h1><p>springCloud 是Spring社区+Netflix公司推出的一款分布式服务框架，其网站位于<a href="http://projects.spring.io/spring-cloud/" target="_blank" rel="external">SpringCloud官方地址</a>和<a href="https://springcloud.cc/" target="_blank" rel="external">SpringCloud中国</a>。</p>
+<p>一般而言，SpringCloud在国外比较流行，而国内由于阿里系工程师的推行，Dubbo服务化的IT结构比较盛行。</p>
+<p>但最新的消息是：阿里内部也逐步在放弃使用DUBBO，目前正在研究SpringCloud或者其他的开源框架。</p>
+<p>用过Dubbo的人比较了解，Dubbo是一个服务治理框架，是逐步从集中式应用-&gt;独立系统应用-&gt;服务化-&gt;大规模分布式这样的步骤发展而来的。由于Dubbo是一个“RPC框架”，因此RPC是核心功能，其他的功能都需要“自行实现”，例如限流、协议扩充、服务自动发现等。这就导致了一个问题是如果要使用DUBBO，那么意味着你还需要研究下zookeeper的集群负载，还需要研究下Dubbo的限流机制，研究下配置自动管理等等一系列的开源组件。</p>
+<p>而SpringCloud不必如此，在SpringCloud中已经集成了：</p>
+<pre><code>1.Spring Cloud Config配置管理
+
+2.Eureka服务发现
+
+3.Hystrix断路器
+
+4.Zuul统一网关
+
+5.Ribbon云端负载均衡
+
+6.Turbine服务事件发现
+
+7.Feign模板化Http客户端
+
+8.完全基于springboot，脱离了web容器而存在
+</code></pre><p>这“几乎”就是一套完整的分布式应用系统，足够让任何一个组织直接从集中式应用的封建时代一步踏进蒸汽时代。</p>
+<p>当然，此处的“几乎”还是需要考虑一下的，没有任何一个系统是完美的，我们身为程序员，必须取其精华去其糟粕，如果单看SpringCloud的官方页面，他们提供了很多神奇的绚烂的功能，但28定律尚未失效，对于SpringCloud来说也是相同。只有上面我列出的8点是有用的内容（有异议勿喷，尤其是看到我说springCloudRedis插件和springCloudBus插件无甚大用的人）</p>
+<h1 id="二、开启你的SpringCloud生涯"><a href="#二、开启你的SpringCloud生涯" class="headerlink" title="二、开启你的SpringCloud生涯"></a>二、开启你的SpringCloud生涯</h1><p>你仅需安装一个maven，然后设置setting.xml中的代理为：</p>
+<pre><code>&lt;servers&gt;
+  &lt;server&gt;
+    &lt;id&gt;releases&lt;/id&gt;
+    &lt;username&gt;ali&lt;/username&gt;
+    &lt;password&gt;ali&lt;/password&gt;
+  &lt;/server&gt;
+  &lt;server&gt;
+    &lt;id&gt;Snapshots&lt;/id&gt;
+    &lt;username&gt;ali&lt;/username&gt;
+    &lt;password&gt;ali&lt;/password&gt;
+  &lt;/server&gt;
+&lt;/servers&gt;
+&lt;mirrors&gt;
+    &lt;mirror&gt;
+      &lt;id&gt;nexus&lt;/id&gt;
+      &lt;mirrorOf&gt;*&lt;/mirrorOf&gt; 
+      &lt;url&gt;http://maven.aliyun.com/nexus/content/groups/public/&lt;/url&gt;
+    &lt;/mirror&gt;
+    &lt;mirror&gt;
+      &lt;id&gt;nexus-public-snapshots&lt;/id&gt;
+      &lt;mirrorOf&gt;public-snapshots&lt;/mirrorOf&gt; 
+      &lt;url&gt;http://maven.aliyun.com/nexus/content/repositories/snapshots/&lt;/url&gt;
+    &lt;/mirror&gt;
+&lt;/mirrors&gt;
+
+  &lt;profiles&gt; 
+    &lt;profile&gt;
+      &lt;id&gt;development&lt;/id&gt;
+      &lt;repositories&gt;
+        &lt;repository&gt;
+          &lt;id&gt;central&lt;/id&gt;
+          &lt;url&gt;http://central&lt;/url&gt;
+          &lt;releases&gt;&lt;enabled&gt;true&lt;/enabled&gt;&lt;updatePolicy&gt;always&lt;/updatePolicy&gt;&lt;/releases&gt;
+          &lt;snapshots&gt;&lt;enabled&gt;true&lt;/enabled&gt;&lt;updatePolicy&gt;always&lt;/updatePolicy&gt;&lt;/snapshots&gt;
+        &lt;/repository&gt;
+      &lt;/repositories&gt;
+     &lt;pluginRepositories&gt;
+        &lt;pluginRepository&gt;
+          &lt;id&gt;central&lt;/id&gt;
+          &lt;url&gt;http://central&lt;/url&gt;
+          &lt;releases&gt;&lt;enabled&gt;true&lt;/enabled&gt;&lt;updatePolicy&gt;always&lt;/updatePolicy&gt;&lt;/releases&gt;
+          &lt;snapshots&gt;&lt;enabled&gt;true&lt;/enabled&gt;&lt;updatePolicy&gt;always&lt;/updatePolicy&gt;&lt;/snapshots&gt;
+        &lt;/pluginRepository&gt;
+      &lt;/pluginRepositories&gt;
+    &lt;/profile&gt;
+    &lt;profile&gt;
+      &lt;!--this profile will allow snapshots to be searched when activated--&gt;
+      &lt;id&gt;public-snapshots&lt;/id&gt;
+      &lt;repositories&gt;
+        &lt;repository&gt;
+          &lt;id&gt;public-snapshots&lt;/id&gt;
+          &lt;url&gt;http://public-snapshots&lt;/url&gt;
+          &lt;releases&gt;&lt;enabled&gt;false&lt;/enabled&gt;&lt;/releases&gt;
+          &lt;snapshots&gt;&lt;enabled&gt;true&lt;/enabled&gt;&lt;updatePolicy&gt;always&lt;/updatePolicy&gt;&lt;/snapshots&gt;
+        &lt;/repository&gt;
+      &lt;/repositories&gt;
+     &lt;pluginRepositories&gt;
+        &lt;pluginRepository&gt;
+          &lt;id&gt;public-snapshots&lt;/id&gt;
+          &lt;url&gt;http://public-snapshots&lt;/url&gt;
+          &lt;releases&gt;&lt;enabled&gt;false&lt;/enabled&gt;&lt;/releases&gt;
+          &lt;snapshots&gt;&lt;enabled&gt;true&lt;/enabled&gt;&lt;updatePolicy&gt;always&lt;/updatePolicy&gt;&lt;/snapshots&gt;
+        &lt;/pluginRepository&gt;
+      &lt;/pluginRepositories&gt;
+    &lt;/profile&gt;
+  &lt;/profiles&gt;
+
+   &lt;activeProfiles&gt;
+    &lt;activeProfile&gt;development&lt;/activeProfile&gt;
+    &lt;activeProfile&gt;public-snapshots&lt;/activeProfile&gt;
+   &lt;/activeProfiles&gt;
+</code></pre><p>之后，就可以开启你的SpringCloud生涯了</p>
+</div><script type="text/javascript" src="/js/share.js?v=0.0.0" async></script><a data-url="https://kanmars.github.io/2016/12/11/2016-12-11-springcloud_use_001_whatissc/" data-id="ciwk7r69w0000ykvqxu9kpci8" class="article-share-link">Aktie</a><div class="tags"><a href="/tags/server/">server</a><a href="/tags/java/">java</a></div><div class="post-nav"><a href="/2017/01/06/2017-01-06-springcloud_use_002_ssc_configserver/" class="pre">[KANMARS原创]-SpringCloud-实用篇(2)-configserver</a><a href="/2016/11/18/2016-11-18-springmvc_source_004_viewresolver/" class="next">[KANMARS原创]-SpringMVC源码解析(4) - 视图处理器</a></div><div data-thread-key="2016/12/11/2016-12-11-springcloud_use_001_whatissc/" data-title="[KANMARS原创]-SpringCloud-实用篇(1)-什么是springCLoud" data-url="https://kanmars.github.io/2016/12/11/2016-12-11-springcloud_use_001_whatissc/" class="ds-share flat"><div class="ds-share-inline"><ul class="ds-share-icons-16"><li data-toggle="ds-share-icons-more"><a href="javascript:void(0);" class="ds-more">分享到：</a></li><li><a href="javascript:void(0);" data-service="weibo" class="ds-weibo">微博</a></li><li><a href="javascript:void(0);" data-service="qzone" class="ds-qzone">QQ空间</a></li><li><a href="javascript:void(0);" data-service="qqt" class="ds-qqt">腾讯微博</a></li><li><a href="javascript:void(0);" data-service="wechat" class="ds-wechat">微信</a></li></ul><div class="ds-share-icons-more"></div></div></div><div data-thread-key="2016/12/11/2016-12-11-springcloud_use_001_whatissc/" data-title="[KANMARS原创]-SpringCloud-实用篇(1)-什么是springCLoud" data-url="https://kanmars.github.io/2016/12/11/2016-12-11-springcloud_use_001_whatissc/" data-author-key="1" class="ds-thread"></div></div></div></div><div class="pure-u-1-4 hidden_mid_and_down"><div id="sidebar"><div class="widget"><form action="//www.baidu.com/baidu" method="get" accept-charset="utf-8" target="_blank" class="search-form"><input type="search" name="word" maxlength="20" placeholder="Search"/><input type="hidden" name="si" value="https://kanmars.github.io"/><input name="tn" type="hidden" value="bds"/><input name="cl" type="hidden" value="3"/><input name="ct" type="hidden" value="2097152"/><input name="s" type="hidden" value="on"/></form></div><div class="widget"><div class="widget-title"><i class="fa fa-folder-o"> Kategorien</i></div></div><div class="widget"><div class="widget-title"><i class="fa fa-star-o"> Tags</i></div><div class="tagcloud"><a href="/tags/jetty/" style="font-size: 15px;">jetty</a> <a href="/tags/it/" style="font-size: 15px;">it</a> <a href="/tags/architecture/" style="font-size: 15px;">architecture</a> <a href="/tags/itlife/" style="font-size: 15px;">itlife</a> <a href="/tags/rsa/" style="font-size: 15px;">rsa</a> <a href="/tags/tb/" style="font-size: 15px;">tb</a> <a href="/tags/drawline/" style="font-size: 15px;">drawline</a> <a href="/tags/life/" style="font-size: 15px;">life</a> <a href="/tags/strategy/" style="font-size: 15px;">strategy</a> <a href="/tags/tblife/" style="font-size: 15px;">tblife</a> <a href="/tags/java/" style="font-size: 15px;">java</a> <a href="/tags/linux/" style="font-size: 15px;">linux</a> <a href="/tags/spring/" style="font-size: 15px;">spring</a> <a href="/tags/server/" style="font-size: 15px;">server</a> <a href="/tags/c/" style="font-size: 15px;">c</a> <a href="/tags/c/" style="font-size: 15px;">c++</a> <a href="/tags/lua/" style="font-size: 15px;">lua</a> <a href="/tags/android/" style="font-size: 15px;">android</a> <a href="/tags/javascript/" style="font-size: 15px;">javascript</a> <a href="/tags/neuralnetwork/" style="font-size: 15px;">neuralnetwork</a> <a href="/tags/cpu/" style="font-size: 15px;">cpu</a> <a href="/tags/disk/" style="font-size: 15px;">disk</a> <a href="/tags/fidsk/" style="font-size: 15px;">fidsk</a> <a href="/tags/fstab/" style="font-size: 15px;">fstab</a> <a href="/tags/lvm/" style="font-size: 15px;">lvm</a> <a href="/tags/aix/" style="font-size: 15px;">aix</a></div></div><div class="widget"><div class="widget-title"><i class="fa fa-file-o"> Letzte</i></div><ul class="post-list"><li class="post-list-item"><a class="post-list-link" href="/2017/01/06/2017-01-06-springcloud_use_002_ssc_configserver/">[KANMARS原创]-SpringCloud-实用篇(2)-configserver</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/12/11/2016-12-11-springcloud_use_001_whatissc/">[KANMARS原创]-SpringCloud-实用篇(1)-什么是springCLoud</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/18/2016-11-18-springmvc_source_004_viewresolver/">[KANMARS原创]-SpringMVC源码解析(4) - 视图处理器</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/18/2016-11-18-springmvc_source_003_requestprocess/">[KANMARS原创]-SpringMVC源码解析(3) - 请求处理过程</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/17/2016-11-17-springmvc_source_002_start/">[KANMARS原创]-SpringMVC源码解析(2) - 启动过程</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/17/2016-11-17-springmvc_source_001_introduce/">[KANMARS原创]-SpringMVC源码解析(1) - 简介</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/11/04/2016-11-04-SomeThingAndNothing/">SomeThingAndNothing</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/25/2016-10-25-news-LongRoad/">news It's a Long Road</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/19/2016-10-19-Scale-Services/">On Designing and Deploying Internet-Scale Services</a></li><li class="post-list-item"><a class="post-list-link" href="/2016/10/18/2016-10-18-dubbo_source_006_summarize/">[KANMARS原创]-DUBBO源码解析(6)-summarize</a></li></ul></div><div class="widget"><div class="comments-title"><i class="fa fa-comment-o"> Letzte Kommentare</i></div><div data-num-items="5" data-show-avatars="0" data-show-time="1" data-show-admin="0" data-excerpt-length="32" data-show-title="1" class="ds-recent-comments"></div></div><div class="widget"><div class="widget-title"><i class="fa fa-external-link"> Blogroll</i></div><ul></ul><a href="http://www.linux.cn" title="Linux-CN" target="_blank">Linux-CN</a><ul></ul><a href="http://www.gome.com.cn" title="国美互联网" target="_blank">国美互联网</a><ul></ul><a href="http://jr.gome.com.cn" title="国美金融" target="_blank">国美金融</a></div></div></div><div class="pure-u-1 pure-u-md-3-4"><div id="footer">© <a href="/." rel="nofollow">KANMARS的博客.</a> Powered by<a rel="nofollow" target="_blank" href="https://hexo.io"> Hexo.</a><a rel="nofollow" target="_blank" href="https://github.com/tufu9441/maupassant-hexo"> Theme</a> by<a rel="nofollow" target="_blank" href="https://github.com/pagecho"> Cho.</a></div></div></div><a id="rocket" href="#top" class="show"></a><script type="text/javascript" src="/js/totop.js?v=0.0.0" async></script><script type="text/javascript" src="//cdn.bootcss.com/fancybox/2.1.5/jquery.fancybox.pack.js" async></script><script type="text/javascript" src="/js/fancybox.js?v=0.0.0" async></script><link rel="stylesheet" type="text/css" href="/css/jquery.fancybox.css?v=0.0.0"><script>var duoshuoQuery = {short_name:'kanmars'};
+(function() {
+    var ds = document.createElement('script');
+    ds.type = 'text/javascript';ds.async = true;
+    ds.src = (document.location.protocol == 'https:' ? 'https:' : 'http:') + '//static.duoshuo.com/embed.js';
+    ds.charset = 'UTF-8';
+    (document.getElementsByTagName('head')[0]
+        || document.getElementsByTagName('body')[0]).appendChild(ds);
+})();
+</script><script type="text/javascript" src="/js/codeblock-resizer.js?v=0.0.0"></script><script type="text/javascript" src="/js/smartresize.js?v=0.0.0"></script></div></body></html>
